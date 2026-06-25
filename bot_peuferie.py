@@ -3,7 +3,7 @@ import json, os, logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-BOT_TOKEN = "8968952235:AAFvHPoQ1rTXmDdJQvWt-BYhmvXu4RYXyCs"
+BOT_TOKEN = "8814685417:AAEQaHJD9WbWiiqhl0-uL8fz_Avh5G40WfA"
 ADMIN_IDS = {1090117356, 8371219330}
 LIVREUR_IDS = {1090117356, 8371219330}  # Recoit les commandes avec boutons livreur
 BOT_USERNAME = "Lapeuferie_nancy_bot"
