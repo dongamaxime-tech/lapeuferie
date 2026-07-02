@@ -1,0 +1,2045 @@
+// ═══════════════════════════════════════════════════════════
+// Pufferie Nancy — Cloudflare Worker
+// Remplace serveur_web.py — zéro cold start, 50ms partout
+// ═══════════════════════════════════════════════════════════
+
+const BOT_TOKEN = "8882589139:AAHkbEKQ15arOM498snNJKN3brgeW_4a8SA";
+const ADMIN_IDS = [1090117356, 8371219330];
+const SB_URL = "https://veqzfrsuiibgrruzjrgc.supabase.co";
+
+const APP_HTML = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pufferie Nancy</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;1,300&family=Space+Mono:wght@400;700&family=Cormorant+Garamond:ital,wght@1,300&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a12;--card:#13131f;--card2:#1a1a2e;--border:#ffffff14;--text:#f0eeff;--muted:#8884aa;--p1:#ff6b6b;--p2:#ffd93d;--p3:#6bcb77;--p4:#4d96ff;--p5:#c77dff;--sol:#9945FF}
+html,body{min-height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif}
+.grad{background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+/* SPLASH */
+#splash{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:opacity 0.7s ease;overflow:hidden;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#splash.hide{opacity:0;pointer-events:none}
+@keyframes orbFloat{0%,100%{transform:translate(0,0)}50%{transform:translate(20px,-20px)}}
+#eagles-wrap{position:absolute;inset:0;pointer-events:none;z-index:5;overflow:hidden}
+.splash-inner{position:relative;z-index:6;text-align:center;padding:0 24px}
+.splash-tag{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.5em;color:var(--muted);margin-bottom:20px;animation:fadeUp 0.8s 0.2s both}
+.splash-logo{font-family:'Bebas Neue',sans-serif;font-size:clamp(60px,15vw,110px);line-height:0.88;letter-spacing:0.06em;animation:logoSpin 1.2s 0.3s cubic-bezier(0.16,1,0.3,1) both;opacity:0}
+.splash-sub{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:clamp(15px,4vw,22px);margin-top:12px;opacity:0.7;animation:fadeUp 1s 0.8s both}
+.splash-tap{margin-top:32px;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.35em;color:var(--muted);animation:pulse 2s ease-in-out infinite}
+@keyframes logoSpin{0%{opacity:0;transform:rotate(-720deg) scale(0.1)}60%{opacity:1;transform:rotate(20deg) scale(1.15)}80%{transform:rotate(-10deg) scale(0.95)}100%{opacity:1;transform:rotate(0deg) scale(1)}}
+@keyframes fadeUp{0%{opacity:0;transform:translateY(20px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes eaglePulse{0%,100%{transform:scale(1) rotate(-5deg);filter:drop-shadow(0 0 24px rgba(199,125,255,1))}50%{transform:scale(1.12) rotate(5deg);filter:drop-shadow(0 0 40px rgba(199,125,255,1))}}
+@keyframes boltPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 24px rgba(255,217,61,1))}50%{transform:scale(1.15);filter:drop-shadow(0 0 50px rgba(255,217,61,1))}}
+@keyframes eagleFly2{0%{opacity:1;transform:translate(-50%,-50%) scale(0.5)}100%{opacity:0;transform:translate(calc(-50% + var(--tx)),calc(-50% + var(--ty))) scale(0.2) rotate(var(--rot))}}
+@keyframes boltShoot{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(calc(-50% + var(--tx)),calc(-50% + var(--ty))) scale(0.1)}}
+@keyframes pulse{0%,100%{opacity:0.3}50%{opacity:1}}
+@keyframes dotPulse{0%,100%{transform:scale(0.6);opacity:0.3}50%{transform:scale(1.2);opacity:1}}
+
+/* APP */
+#app{display:none;flex-direction:column;min-height:100vh}
+#app.on{display:flex}
+
+/* NAV BAS */
+#bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(10,10,18,0.97);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-around;padding:8px 0 calc(8px + env(safe-area-inset-bottom));height:calc(62px + env(safe-area-inset-bottom))}
+.bnav-item{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);text-decoration:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;flex:1;padding:4px 0;transition:all 0.2s;cursor:pointer;border:none;background:none}
+.bnav-item svg{width:22px;height:22px;transition:all 0.2s}
+.bnav-item span{font-size:10px;letter-spacing:0.03em;transition:all 0.2s}
+.bnav-item.active{color:#fff}
+.bnav-item.active svg{filter:drop-shadow(0 0 6px rgba(255,255,255,0.5))}
+.bnav-item[id="nav-admin"].active{color:var(--p5)}
+.bnav-item[id="nav-admin"].active svg{filter:drop-shadow(0 0 6px rgba(199,125,255,0.8))}
+.badge{background:rgba(0,0,0,0.25);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700}
+
+/* PAGES */
+.page{display:none;padding:20px 16px 90px;max-width:900px;margin:0 auto;width:100%}
+.page.active{display:block}
+
+/* STATUT */
+.statut-banner{border-radius:14px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;border:1px solid;transition:all 0.4s}
+.sdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;animation:pulse 2s ease-in-out infinite}
+
+/* SLIDER */
+.slider{position:relative;border-radius:20px;overflow:hidden;height:210px;margin-bottom:28px;border:1px solid var(--border)}
+.slide{position:absolute;inset:0;display:flex;align-items:center;padding:28px;opacity:0;transition:opacity 0.7s}
+.slide.on{opacity:1}
+.slide-1{background:linear-gradient(135deg,#1a0520,#2d0a3a)}
+.slide-2{background:linear-gradient(135deg,#0a1a30,#0d2d50)}
+.slide-3{background:linear-gradient(135deg,#1a1500,#2d2200)}
+.slide-tag{font-size:10px;letter-spacing:0.3em;font-family:'Space Mono',monospace;margin-bottom:8px}
+.slide-1 .slide-tag{color:var(--p5)}.slide-2 .slide-tag{color:var(--p4)}.slide-3 .slide-tag{color:var(--p2)}
+.slide-title{font-family:'Bebas Neue',sans-serif;font-size:clamp(30px,6vw,50px);line-height:0.92;color:#fff;margin-bottom:10px}
+.slide-price{font-family:'Space Mono',monospace;font-size:18px;font-weight:700}
+.slide-1 .slide-price{color:var(--p5)}.slide-2 .slide-price{color:var(--p4)}.slide-3 .slide-price{color:var(--p2)}
+.slide-emoji{position:absolute;right:20px;font-size:70px;opacity:0.45;pointer-events:none}
+.slide-dots{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.25);cursor:pointer;transition:all 0.3s;border:none}
+.dot.on{width:20px;border-radius:4px;background:linear-gradient(90deg,#ff6b6b,#c77dff)}
+.snav{position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.1);border:none;color:#fff;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.snav.prev{left:12px}.snav.next{right:12px}
+
+/* SEC */
+.sec-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px}
+.sec-title{font-family:'Bebas Neue',sans-serif;font-size:30px;letter-spacing:0.05em}
+.sec-sub{font-size:11px;color:var(--muted)}
+
+/* FILTERS */
+.filters{display:flex;gap:7px;margin-bottom:22px;flex-wrap:wrap}
+.fbtn{background:none;border:1px solid var(--border);color:var(--muted);font-size:12px;padding:6px 14px;border-radius:20px;cursor:pointer;transition:all 0.2s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.fbtn.active{color:#000;border-color:transparent;font-weight:600;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff)}
+
+/* GRID */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px}
+.pcard{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;cursor:pointer;transition:all 0.3s}
+.pcard:hover{border-color:rgba(255,255,255,0.22);transform:translateY(-4px)}
+.pimg{height:110px;display:flex;align-items:center;justify-content:center;font-size:52px;position:relative;background:rgba(255,255,255,0.02)}
+.pbadge{position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;padding:3px 8px;border-radius:9px;font-family:'Space Mono',monospace}
+.bb{background:rgba(255,217,61,0.18);color:var(--p2);border:1px solid rgba(255,217,61,0.35)}
+.bn{background:rgba(107,203,119,0.18);color:var(--p3);border:1px solid rgba(107,203,119,0.35)}
+.bh{background:rgba(255,107,107,0.18);color:var(--p1);border:1px solid rgba(255,107,107,0.35)}
+.bp{background:rgba(199,125,255,0.18);color:var(--p5);border:1px solid rgba(199,125,255,0.35)}
+.pinfo{padding:12px}
+.pbrand{font-size:9px;letter-spacing:0.25em;color:var(--muted);font-family:'Space Mono',monospace;text-transform:uppercase}
+.pname{font-size:14px;font-weight:500;margin:4px 0 2px}
+.pflavor{font-size:11px;color:var(--muted);font-style:italic;margin-bottom:10px}
+.pfoot{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.pprice{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.abtn{border:none;width:100%;padding:10px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;color:#000;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);-webkit-tap-highlight-color:transparent;touch-action:manipulation;font-family:'DM Sans',sans-serif}
+.abtn.added{background:rgba(107,203,119,0.3)!important;color:var(--p3)!important}
+
+.mini-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;cursor:pointer;transition:all 0.2s}
+.mini-card:hover{border-color:rgba(255,255,255,0.2)}
+.mini-card-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.mini-emoji{font-size:22px;flex-shrink:0}
+.mini-name{font-size:12px;font-weight:500;line-height:1.3}
+.mini-flavor{font-size:10px;color:var(--muted);font-style:italic;margin-bottom:6px}
+.mini-foot{display:flex;align-items:center;justify-content:space-between}
+.mini-price{font-family:'Space Mono',monospace;font-size:11px;font-weight:700;background:linear-gradient(135deg,#ff6b6b,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.mini-stock{font-size:9px;font-family:'Space Mono',monospace;padding:2px 6px;border-radius:6px}
+.mini-stock.ok{background:rgba(107,203,119,0.15);color:var(--p3)}
+.mini-stock.low{background:rgba(255,217,61,0.15);color:var(--p2)}
+.mini-stock.out{background:rgba(255,107,107,0.15);color:var(--p1)}
+.mini-add{border:none;width:100%;padding:7px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;color:#000;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);-webkit-tap-highlight-color:transparent;touch-action:manipulation;margin-top:6px;font-family:'DM Sans',sans-serif}
+
+/* INFOS */
+.info-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+.info-card-title{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.info-brand{font-family:'Bebas Neue',sans-serif;font-size:18px}
+.info-desc{font-size:12px;color:var(--muted);line-height:1.6}
+
+/* COMPTE */
+.acc-hero{background:linear-gradient(135deg,var(--card2),rgba(199,125,255,0.1));border:1px solid rgba(199,125,255,0.22);border-radius:20px;padding:24px;margin-bottom:20px;display:flex;align-items:center;gap:18px}
+.avatar{width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#000;flex-shrink:0;font-family:'Bebas Neue',sans-serif}
+.acc-name{font-family:'Bebas Neue',sans-serif;font-size:26px}
+.acc-level{display:inline-block;font-size:10px;letter-spacing:0.2em;padding:3px 10px;border-radius:10px;font-family:'Space Mono',monospace;margin-top:4px;background:rgba(199,125,255,0.15);color:var(--p5)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center}
+.stat-v{font-family:'Bebas Neue',sans-serif;font-size:34px;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.stat-l{font-size:10px;color:var(--muted);letter-spacing:0.1em;margin-top:2px}
+.loyalty{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px}
+.lbar-bg{background:rgba(255,255,255,0.08);border-radius:10px;height:10px;overflow:hidden}
+.lbar{height:100%;border-radius:10px;transition:width 1.2s ease;background:linear-gradient(90deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff)}
+.linfo{display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--muted)}
+.orders{display:flex;flex-direction:column;gap:10px}
+.ocard{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;align-items:center;gap:12px}
+.oid{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted)}
+.oname{font-size:13px;font-weight:500;margin:2px 0}
+.odate{font-size:10px;color:var(--muted)}
+.oprice{font-family:'Space Mono',monospace;font-size:13px;background:linear-gradient(135deg,#ffd93d,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.otag{font-size:9px;padding:2px 7px;border-radius:7px;font-weight:600;background:rgba(107,203,119,0.2);color:var(--p3)}
+
+/* ADMIN */
+.admin-hdr{background:linear-gradient(135deg,rgba(199,125,255,0.1),rgba(77,150,255,0.08));border:1px solid rgba(199,125,255,0.25);border-radius:20px;padding:20px 24px;margin-bottom:22px;display:flex;align-items:center;gap:14px}
+.admin-badge{background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);color:#000;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:5px 14px;border-radius:20px;letter-spacing:0.12em;flex-shrink:0}
+.astats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px}
+.astat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;text-align:center}
+.astat-v{font-family:'Bebas Neue',sans-serif;font-size:28px;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.astat-l{font-size:9px;color:var(--muted);letter-spacing:0.12em;margin-top:2px;font-family:'Space Mono',monospace}
+.agrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.acard{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px}
+.acard-title{font-family:'Bebas Neue',sans-serif;font-size:18px;margin-bottom:14px}
+.flabel{font-size:10px;letter-spacing:0.18em;color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:5px;display:block}
+.finput{background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;width:100%;margin-bottom:12px;-webkit-appearance:none}
+.finput:focus{border-color:rgba(199,125,255,0.5)}
+.frow2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.epicker{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:12px}
+.eopt{background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:6px;font-size:18px;cursor:pointer;text-align:center;transition:all 0.15s;-webkit-tap-highlight-color:transparent}
+.eopt.on{border-color:var(--p5);background:rgba(199,125,255,0.18)}
+.cats{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.copt{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:5px 11px;border-radius:20px;cursor:pointer;transition:all 0.2s;-webkit-tap-highlight-color:transparent}
+.copt.on{color:#000;border-color:transparent;font-weight:600;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff)}
+.bsel{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.bopt{font-size:10px;padding:4px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all 0.2s;font-family:'Space Mono',monospace;-webkit-tap-highlight-color:transparent}
+.bnone{background:rgba(255,255,255,0.05);color:var(--muted);border-color:var(--border)}.bnone.on{border-color:rgba(255,255,255,0.3);color:var(--text)}
+.bbest{background:rgba(255,217,61,0.14);color:var(--p2)}.bbest.on{background:rgba(255,217,61,0.28)}
+.bnew{background:rgba(107,203,119,0.14);color:var(--p3)}.bnew.on{background:rgba(107,203,119,0.28)}
+.bhot{background:rgba(255,107,107,0.14);color:var(--p1)}.bhot.on{background:rgba(255,107,107,0.28)}
+.bpromo{background:rgba(199,125,255,0.14);color:var(--p5)}.bpromo.on{background:rgba(199,125,255,0.28)}
+.upload-z{border:2px dashed var(--border);border-radius:12px;padding:18px;text-align:center;cursor:pointer;margin-bottom:12px}
+.sbtn{width:100%;border:none;border-radius:12px;padding:12px;font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:0.1em;cursor:pointer;color:#000;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.aplist{display:flex;flex-direction:column;gap:8px;max-height:360px;overflow-y:auto}
+.apitem{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.apemoji{font-size:24px;width:36px;text-align:center;flex-shrink:0}
+.apinfo{flex:1;min-width:0}
+.apname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.apmeta{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace}
+.ibtns{display:flex;gap:5px;flex-shrink:0}
+.ibtn{background:rgba(255,255,255,0.06);border:none;color:var(--text);width:28px;height:28px;border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent}
+.ibtn.del:hover{background:rgba(255,107,107,0.2);color:var(--p1)}
+.sbtn-s{border:1px solid;border-radius:14px;padding:14px;cursor:pointer;text-align:left;background:none;transition:all 0.2s;-webkit-tap-highlight-color:transparent;touch-action:manipulation;width:100%;margin-bottom:10px}
+.sbtn-s.on{box-shadow:0 0 0 2px rgba(255,255,255,0.3);filter:brightness(1.2)}
+.sbtn-s-label{font-size:9px;letter-spacing:0.2em;font-family:'Space Mono',monospace;margin-bottom:5px}
+.sbtn-s-desc{font-size:12px;color:var(--text)}
+.srow{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end}
+
+/* CART */
+#cart-modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.78);backdrop-filter:blur(12px);align-items:flex-end;justify-content:center}
+#cart-modal.on{display:flex}
+.cart-panel{background:var(--card2);border-radius:24px 24px 0 0;border-top:1px solid var(--border);width:100%;max-width:900px;padding:24px;max-height:85vh;overflow-y:auto}
+.cart-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.cart-title{font-family:'Bebas Neue',sans-serif;font-size:26px}
+.xbtn{background:rgba(255,255,255,0.08);border:none;color:var(--text);width:32px;height:32px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.citem{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.cemoji{font-size:30px;width:44px;text-align:center;flex-shrink:0}
+.cname{font-size:14px;font-weight:500}
+.cflavor{font-size:11px;color:var(--muted)}
+.cprice{font-family:'Space Mono',monospace;font-size:13px;background:linear-gradient(135deg,#ff6b6b,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.cqty{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.qbtn{background:rgba(255,255,255,0.08);border:none;color:var(--text);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.total-row{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.total-v{font-family:'Space Mono',monospace;font-size:20px;font-weight:700;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.pay-methods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.pmethod{border:1px solid var(--border);border-radius:13px;padding:13px 10px;text-align:center;cursor:pointer;transition:all 0.2s;background:none;color:var(--text);-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.pmethod.on{border-color:transparent;background:rgba(255,255,255,0.07);box-shadow:0 0 0 1.5px var(--p5)}
+.picon{font-size:22px;display:block;margin-bottom:5px}
+.pname-m{font-size:12px;font-weight:500}
+.psub{font-size:10px;color:var(--muted);margin-top:2px}
+.cbtn{width:100%;border:none;border-radius:14px;padding:15px;font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:0.1em;cursor:pointer;color:#000;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);margin-top:10px;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+
+/* MODALS */
+.modal{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,0.85);backdrop-filter:blur(16px);align-items:center;justify-content:center;padding:20px 0;overflow-y:auto}
+.modal.on{display:flex}
+.mpanel{background:var(--card2);border-radius:24px;padding:26px 22px;max-width:380px;width:90%;margin:auto;text-align:center}
+.mtag{font-size:11px;letter-spacing:0.3em;font-family:'Space Mono',monospace;margin-bottom:10px}
+.mtitle{font-family:'Bebas Neue',sans-serif;font-size:28px;margin-bottom:6px}
+.msub{font-size:12px;color:var(--muted);margin-bottom:20px}
+.mbtn{width:100%;border:none;border-radius:13px;padding:13px;font-family:'Bebas Neue',sans-serif;font-size:19px;letter-spacing:0.1em;cursor:pointer;margin-bottom:10px;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.mlink{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
+
+/* TOAST */
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(110px);color:#000;border-radius:14px;padding:11px 22px;font-size:13px;font-weight:600;z-index:9999;transition:transform 0.4s cubic-bezier(0.16,1,0.3,1);white-space:nowrap;pointer-events:none;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff)}
+#toast.on{transform:translateX(-50%) translateY(0)}
+#music-btn{position:fixed;top:68px;right:12px;z-index:100;background:var(--card2);border:1px solid var(--border);color:var(--p5);width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:15px;display:none;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+</style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash">
+  
+  <canvas id="splash-canvas" style="position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none"></canvas>
+  <div class="splash-inner" style="position:relative;z-index:10">
+    <div class="splash-tag">Nancy · Grand Est · France</div>
+    <div class="splash-logo"><span class="grad">Pufferie</span><br><span style="color:#fff">Nancy</span></div>
+    <div class="splash-sub">Boutique de référence à Nancy</div>
+    <div style="margin-top:18px;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);animation:fadeUp 1s 1s both">◆ DEPUIS 2026 ◆</div>
+    <div class="splash-tap" style="margin-top:28px">APPUYER POUR ENTRER</div>
+  </div>
+</div>
+
+<!-- LOADING SCREEN -->
+<style>
+@keyframes sablier-retourne {
+  0%,10%   { transform: rotate(0deg); }
+  45%,55%  { transform: rotate(180deg); }
+  90%,100% { transform: rotate(360deg); }
+}
+@keyframes sable-tombe {
+  0%,10%   { clip-path: inset(0 0 0 0); }
+  45%      { clip-path: inset(100% 0 0 0); }
+  55%      { clip-path: inset(0 0 100% 0); }
+  90%,100% { clip-path: inset(0 0 0 0); }
+}
+#sablier-wrap { animation: sablier-retourne 2.4s ease-in-out infinite; }
+#sable-inner  { animation: sable-tombe 2.4s ease-in-out infinite; }
+</style>
+<div id="loading-screen" style="display:none;position:fixed;inset:0;z-index:5000;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:28px;transition:opacity 0.4s ease">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;letter-spacing:0.08em;text-align:center">
+    <span style="background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Pufferie</span> <span style="color:#fff">Nancy</span>
+  </div>
+
+  <!-- Sablier SVG animé -->
+  <div id="sablier-wrap">
+    <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Cadre sablier -->
+      <path d="M18 8h44M18 72h44M22 8 C22 8 16 28 40 40 C64 52 58 72 58 72 L22 72 C22 72 16 52 40 40 C64 28 58 8 58 8 Z" stroke="url(#sg)" stroke-width="3.5" stroke-linejoin="round" fill="none"/>
+      <!-- Sable (partie qui s'anime) -->
+      <g id="sable-inner">
+        <path d="M25 14 C28 22 35 30 40 34 C45 30 52 22 55 14 Z" fill="url(#sg)" opacity="0.85"/>
+        <path d="M30 66 C32 60 37 54 40 50 C43 54 48 60 50 66 Z" fill="url(#sg)" opacity="0.5"/>
+      </g>
+      <defs>
+        <linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#ffd93d"/>
+          <stop offset="100%" stop-color="#ff6b6b"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+
+  <div style="text-align:center">
+    <div id="loader-msg" style="font-size:15px;color:var(--text);font-weight:600;margin-bottom:6px">Veuillez patienter</div>
+    <div id="loader-sub" style="font-size:12px;color:var(--muted)">Chargement du stock en cours…</div>
+  </div>
+</div>
+
+<audio id="music""
+<audio id="music" src="music.mp3" loop preload="none"></audio>
+
+<!-- APP -->
+<div id="app">
+  <!-- HEADER simple -->
+  <div style="position:sticky;top:0;z-index:100;background:rgba(10,10,18,0.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:0.08em"><span class="grad">Pufferie</span> <span style="color:#fff;font-size:16px;opacity:0.6">Nancy</span></div>
+    <a href="#" onclick="openCart();return false" style="background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);color:#000;border:none;border-radius:20px;padding:7px 14px;font-weight:600;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;text-decoration:none;-webkit-tap-highlight-color:transparent">🛒 <span style="background:rgba(0,0,0,0.25);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;font-weight:700" id="cart-count">0</span></a>
+  </div>
+
+  <!-- NAV BAS -->
+  <nav id="bottom-nav">
+    <a class="bnav-item active" href="#" onclick="goPage('shop',this);return false" id="nav-shop">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Boutique</span>
+    </a>
+    <a class="bnav-item" href="#" onclick="goPage('infos',this);return false" id="nav-infos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>Infos</span>
+    </a>
+    <a class="bnav-item" href="#" onclick="goPage('account',this);return false" id="nav-account">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span>Compte</span>
+    </a>
+    <a class="bnav-item" href="#" onclick="goPage('preorder',this);return false" id="nav-preorder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      <span>Précommande</span>
+    </a>
+    <a class="bnav-item" href="#" onclick="goPage('loyalty',this);return false" id="nav-loyalty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      <span>Fidélité</span>
+    </a>
+    <a class="bnav-item" href="#" onclick="goPage('support',this);return false" id="nav-support">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span>Support</span>
+    </a>
+    <a class="bnav-item admin-tab" href="#" onclick="goPage('admin',this);return false" id="nav-admin" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+      <span>Admin</span>
+    </a>
+  </nav>
+
+  <!-- BOUTIQUE -->
+  <div class="page active" id="page-shop">
+
+    <!-- STATUT -->
+    <div id="statut-banner" class="statut-banner" style="border-color:rgba(107,203,119,0.3);background:rgba(107,203,119,0.08)">
+      <div class="sdot" id="sdot" style="background:#6bcb77;box-shadow:0 0 8px #6bcb77"></div>
+      <div style="flex:1">
+        <div style="font-size:12px;letter-spacing:0.12em;font-family:monospace;font-weight:700;color:#6bcb77" id="slabel">Disponible</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px" id="ssub">Livraisons en cours · On est chauds 🔥</div>
+      </div>
+      <div style="font-size:20px">💨</div>
+    </div>
+
+    <!-- SÉLECTION CATALOGUE : JnR | Razz Bar -->
+    <div id="view-home" style="display:block;position:relative">
+      <div id="brand-particles" style="position:absolute;inset:0;pointer-events:none;z-index:10;overflow:hidden"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;height:calc(100dvh - 130px)">
+
+        <!-- JnR -->
+        <div id="tile-jnr" onclick="openBrand('jnr')" style="background:linear-gradient(145deg,#12052a,#2d1050);border:1px solid rgba(199,125,255,0.35);border-radius:20px;text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;position:relative;overflow:hidden;">
+          <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,rgba(199,125,255,0.15),transparent 70%);pointer-events:none"></div>
+          <div id="jnr-eagle" style="font-size:80px;filter:drop-shadow(0 0 24px rgba(199,125,255,1));position:relative;z-index:2;animation:eaglePulse 3s ease-in-out infinite">🦅</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;background:linear-gradient(135deg,#ff6b6b,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:0.05em;position:relative;z-index:2">JnR</div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:0.2em;position:relative;z-index:2">PREMIUM</div>
+          <div id="jnr-count" style="font-size:12px;color:rgba(199,125,255,0.8);position:relative;z-index:2"></div>
+        </div>
+
+        <!-- Razz Bar -->
+        <div id="tile-razz" onclick="openBrand('razzbar')" style="background:linear-gradient(145deg,#1a1100,#2d2000);border:1px solid rgba(255,217,61,0.35);border-radius:20px;text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;position:relative;overflow:hidden;">
+          <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,rgba(255,217,61,0.12),transparent 70%);pointer-events:none"></div>
+          <div id="razz-bolt" style="font-size:80px;filter:drop-shadow(0 0 24px rgba(255,217,61,1));position:relative;z-index:2;animation:boltPulse 2.5s ease-in-out infinite">⚡</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:48px;color:var(--p2);letter-spacing:0.05em;position:relative;z-index:2">Razz Bar</div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:0.2em;position:relative;z-index:2">SPÉCIALISTE</div>
+          <div id="razz-count" style="font-size:12px;color:rgba(255,217,61,0.8);position:relative;z-index:2"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- VUE PRODUITS D'UNE MARQUE -->
+    <div id="view-brand" style="display:none">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+        <button onclick="closeBrand()" style="background:rgba(255,255,255,0.08);border:none;color:var(--text);width:36px;height:36px;border-radius:50%;font-size:18px;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent">‹</button>
+        <div id="brand-title" style="font-family:sans-serif;font-size:28px"></div>
+      </div>
+      <div id="brand-grid" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+
+  </div>
+
+  <!-- PRÉCOMMANDE -->
+  <div class="page" id="page-preorder">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:40px;margin-bottom:8px">⭐</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:32px">Précommande</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Réserve un goût ou modèle non disponible</div>
+    </div>
+
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:16px">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;margin-bottom:14px">📝 Ta demande</div>
+      <label class="flabel">MARQUE</label>
+      <select class="finput" id="pre-brand" style="cursor:pointer">
+        <option value="">Choisir une marque...</option>
+        <option value="JnR">JnR</option>
+        <option value="Razz Bar">Razz Bar</option>
+        <option value="Al Fakher">Al Fakher</option>
+        <option value="Autre">Autre</option>
+      </select>
+      <label class="flabel">MODÈLE / GOÛT SOUHAITÉ</label>
+      <input class="finput" id="pre-flavor" placeholder="ex: Blueberry Ice, Watermelon...">
+      <label class="flabel">FORMAT</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <button class="pmethod on" id="pre-small" onclick="selFormat(this,'petit')" style="padding:10px">
+          <div style="font-size:18px">📦</div>
+          <div style="font-size:12px;font-weight:600">Petit format</div>
+        </button>
+        <button class="pmethod" id="pre-big" onclick="selFormat(this,'gros')" style="padding:10px">
+          <div style="font-size:18px">📦📦</div>
+          <div style="font-size:12px;font-weight:600">Gros format</div>
+        </button>
+      </div>
+      <label class="flabel">QUANTITÉ</label>
+      <input class="finput" id="pre-qty" type="number" min="1" placeholder="1" value="1">
+      <label class="flabel">MESSAGE (optionnel)</label>
+      <textarea class="finput" id="pre-msg" rows="2" placeholder="Précisions supplémentaires..." style="resize:none"></textarea>
+      <button class="sbtn" onclick="submitPreorder()" style="margin-top:4px">ENVOYER MA PRÉCOMMANDE →</button>
+    </div>
+
+  </div>
+
+  <!-- FIDÉLITÉ -->
+  <div class="page" id="page-loyalty">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:40px;margin-bottom:8px">🎁</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:32px">Programme Fidélité</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">Plus tu commandes, plus tu gagnes</div>
+    </div>
+
+    <!-- Statut du client -->
+    <div id="loyalty-status-card" style="background:linear-gradient(135deg,var(--card2),rgba(199,125,255,0.1));border:1px solid rgba(199,125,255,0.25);border-radius:20px;padding:22px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+        <div id="loyalty-icon" style="font-size:40px">✦</div>
+        <div>
+          <div id="loyalty-tier-name" style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--p5)">MEMBRE</div>
+          <div id="loyalty-pts-display" style="font-size:12px;color:var(--muted)">0 points</div>
+        </div>
+      </div>
+      <div style="background:rgba(255,255,255,0.08);border-radius:10px;height:10px;overflow:hidden;margin-bottom:8px">
+        <div id="loyalty-bar" style="height:100%;border-radius:10px;background:linear-gradient(90deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);transition:width 1.2s ease;width:0%"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)">
+        <span id="loyalty-current-pts">0 pts</span>
+        <span id="loyalty-next-reward" style="color:var(--p5)"></span>
+        <span id="loyalty-next-pts">100 pts</span>
+      </div>
+    </div>
+
+    <!-- Paliers -->
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;margin-bottom:14px">Les paliers</div>
+    <div id="loyalty-tiers-display" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
+  <!-- SUPPORT -->
+  <div class="page" id="page-support">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:40px;margin-bottom:8px">💬</div>
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:32px">Support</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">On est là pour toi 7j/7</div>
+    </div>
+
+    <!-- Telegram SAV -->
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;margin-bottom:12px">💬 Telegram</div>
+    <a href="https://t.me/Pufferie_ncy" target="_blank" style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(77,150,255,0.1),rgba(77,150,255,0.05));border:1px solid rgba(77,150,255,0.25);border-radius:14px;padding:16px;text-decoration:none;color:var(--text);margin-bottom:10px;-webkit-tap-highlight-color:transparent">
+      <div style="width:44px;height:44px;border-radius:50%;background:rgba(77,150,255,0.15);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">✈️</div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:600;color:var(--p4)">@Pufferie_ncy</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Clique pour nous contacter</div>
+      </div>
+      <div style="font-size:18px;color:var(--muted)">›</div>
+    </a>
+    <a href="https://t.me/lapufferiesav2" target="_blank" style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(77,150,255,0.1),rgba(77,150,255,0.05));border:1px solid rgba(77,150,255,0.25);border-radius:14px;padding:16px;text-decoration:none;color:var(--text);margin-bottom:20px;-webkit-tap-highlight-color:transparent">
+      <div style="width:44px;height:44px;border-radius:50%;background:rgba(77,150,255,0.15);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">✈️</div>
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:600;color:var(--p4)">@lapufferiesav2</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Clique pour nous contacter</div>
+      </div>
+      <div style="font-size:18px;color:var(--muted)">›</div>
+    </a>
+
+    <!-- WhatsApp -->
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;margin-bottom:12px">📱 WhatsApp</div>
+    <div id="whatsapp-display">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;color:var(--muted);font-size:13px">
+        📞 Numéro WhatsApp bientôt disponible
+      </div>
+    </div>
+  </div>
+
+  <!-- INFOS -->
+  <div class="page" id="page-infos">
+    <div class="sec-title" style="margin-bottom:16px">💨 Nos Produits</div>
+    <div class="info-card"><div class="info-card-title"><span style="font-size:24px">🦅</span><div class="info-brand" style="background:linear-gradient(135deg,#ff6b6b,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">JnR</div></div><div class="info-desc">Spécialiste des saveurs premium · Petits & gros formats · Sur commande</div></div>
+    <div class="info-card"><div class="info-card-title"><span style="font-size:24px">🍎</span><div class="info-brand" style="color:var(--p2)">Al Fakher</div></div><div class="info-desc">La référence classique · Saveurs authentiques · Disponible en stock</div></div>
+    <div class="info-card"><div class="info-card-title"><span style="font-size:24px">⚡</span><div class="info-brand" style="color:var(--p4)">Razz Bar</div></div><div class="info-desc">Spécialiste Razz Bar · Petits & gros formats · Sur commande</div></div>
+    <div class="info-card"><div class="info-card-title"><span style="font-size:24px">🌊</span><div class="info-brand" style="color:var(--p3)">Azul</div></div><div class="info-desc">Saveurs fraîches & exotiques · Sur commande</div></div>
+    <div style="background:linear-gradient(135deg,rgba(199,125,255,0.1),rgba(77,150,255,0.08));border:1px solid rgba(199,125,255,0.25);border-radius:14px;padding:16px;text-align:center;margin-bottom:24px"><div style="font-size:13px;font-weight:500;margin-bottom:4px">📦 Petit ou gros format ?</div><div style="font-size:12px;color:var(--muted)">Tout disponible sur commande via le bot</div></div>
+    <div class="sec-title" style="margin-bottom:16px">📍 Zone de livraison</div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px;font-size:14px;color:var(--text);line-height:1.7;margin-bottom:24px" id="zone-display">Nancy centre · Maxéville · Laxou · Vandœuvre · Essey-lès-Nancy</div>
+    <div class="sec-title" style="margin-bottom:16px">🛵 Livreurs disponibles</div>
+    <div id="livreurs-list" class="orders"></div>
+  </div>
+
+  <!-- COMPTE -->
+  <div class="page" id="page-account">
+    <div class="acc-hero">
+      <div class="avatar" id="acc-av">👤</div>
+      <div><div class="acc-name" id="acc-name">Membre</div><div style="font-size:12px;color:var(--muted);margin-top:2px" id="acc-user"></div><div class="acc-level" id="acc-level">✦ MEMBRE</div></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="stat-v" id="s-cmds">0</div><div class="stat-l">COMMANDES</div></div>
+      <div class="stat"><div class="stat-v" id="s-pts">0</div><div class="stat-l">POINTS</div></div>
+      <div class="stat"><div class="stat-v" id="s-total">0€</div><div class="stat-l">DÉPENSÉ</div></div>
+    </div>
+    <div class="loyalty">
+      <div style="font-size:13px;font-weight:500;margin-bottom:10px" id="l-label">🎯 Fidélité — Prochain palier : SILVER</div>
+      <div class="lbar-bg"><div class="lbar" id="lbar" style="width:0%"></div></div>
+      <div class="linfo"><span id="l-pts">0 pts</span><span style="color:var(--p5)" id="l-manq"></span><span id="l-next">100 pts</span></div>
+    </div>
+    <div class="sec-title" style="margin-bottom:14px">Mes commandes</div>
+    <div class="orders" id="orders-list"><div style="text-align:center;padding:32px;color:var(--muted)"><div style="font-size:36px">📭</div><div style="margin-top:10px;font-size:13px">Aucune commande pour le moment</div></div></div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="page" id="page-admin">
+    <div class="admin-hdr"><div class="admin-badge">⚡ ADMIN</div><div><div style="font-family:sans-serif;font-size:22px">Panel Administrateur</div><div style="font-size:12px;color:var(--muted);margin-top:2px">@Lapeuferie_nancy_bot</div></div></div>
+    <div class="astats">
+      <div class="astat"><div class="astat-v" id="a-prods">0</div><div class="astat-l">PRODUITS</div></div>
+      <div class="astat"><div class="astat-v" id="a-cmds">0</div><div class="astat-l">COMMANDES</div></div>
+      <div class="astat"><div class="astat-v" id="a-low">0</div><div class="astat-l">STOCK BAS</div></div>
+    </div>
+
+    <!-- AJOUTER PRODUIT -->
+    <div class="agrid">
+      <div class="acard">
+        <div class="acard-title">➕ Ajouter un produit</div>
+        <label class="flabel">MARQUE</label><input class="finput" id="f-brand" placeholder="ex: Al Fakher, JnR...">
+        <label class="flabel">NOM</label><input class="finput" id="f-name" placeholder="ex: Double Pomme...">
+        <label class="flabel">GOÛT</label><input class="finput" id="f-flavor" placeholder="ex: Pomme fraîche & anis">
+        <div class="frow2">
+          <div><label class="flabel">PRIX (€)</label><input class="finput" id="f-price" type="number" placeholder="0.00" step="0.1"></div>
+          <div><label class="flabel">STOCK</label><input class="finput" id="f-stock" type="number" placeholder="0"></div>
+        </div>
+        <label class="flabel">EMOJI</label><div class="epicker" id="epicker"></div>
+        <label class="flabel">PHOTO</label>
+        <div class="upload-z" onclick="document.getElementById('photo-input').click()">
+          <div style="font-size:24px;margin-bottom:4px">📸</div>
+          <div style="font-size:12px;color:var(--muted)">Cliquer pour uploader</div>
+          <input type="file" id="photo-input" accept="image/*" style="display:none" onchange="previewPhoto(this)">
+          <img id="photo-prev" style="width:100%;max-height:80px;object-fit:cover;border-radius:8px;margin-top:8px;display:none">
+        </div>
+        <button id="remove-photo-btn" onclick="removePhoto()" style="display:none;background:rgba(255,107,107,0.15);border:1px solid rgba(255,107,107,0.3);color:var(--p1);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;width:100%;margin-bottom:12px;-webkit-tap-highlight-color:transparent">🗑 Supprimer la photo</button>
+        <label class="flabel" style="margin-top:12px">CATÉGORIE</label>
+        <div class="cats">
+          <button class="copt" onclick="pickCat(this,'alfakher')">Al Fakher</button>
+          <button class="copt" onclick="pickCat(this,'jnr')">JnR</button>
+          <button class="copt" onclick="pickCat(this,'razzbar')">Razz Bar</button>
+          <button class="copt" onclick="pickCat(this,'pack')">Pack</button>
+        </div>
+        <label class="flabel">BADGE</label>
+        <div class="bsel">
+          <button class="bopt bnone on" onclick="pickBadge(this,'')">Aucun</button>
+          <button class="bopt bbest" onclick="pickBadge(this,'best')">⭐ BEST</button>
+          <button class="bopt bnew" onclick="pickBadge(this,'new')">NEW</button>
+          <button class="bopt bhot" onclick="pickBadge(this,'hot')">HOT 🔥</button>
+          <button class="bopt bpromo" onclick="pickBadge(this,'promo')">PROMO</button>
+        </div>
+        <button class="sbtn" onclick="addProd()">AJOUTER →</button>
+      </div>
+      <div class="acard">
+        <div class="acard-title">📦 Catalogue</div>
+        <div class="aplist" id="admin-list"></div>
+      </div>
+    </div>
+
+    <!-- STOCK -->
+    <div class="acard">
+      <div class="acard-title">📊 Modifier le stock</div>
+      <div class="srow">
+        <div><label class="flabel">PRODUIT</label><select class="finput" id="stock-sel" style="cursor:pointer"></select></div>
+        <div><label class="flabel">NOUVEAU STOCK</label><input class="finput" id="stock-qty" type="number" placeholder="ex: 50"></div>
+        <button class="sbtn" style="width:auto;padding:9px 16px;font-size:14px;align-self:end" onclick="updateStock()">OK</button>
+      </div>
+    </div>
+
+    <!-- STATUT -->
+    <div class="acard">
+      <div class="acard-title">🟢 Statut boutique</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Visible par tous les clients en temps réel.</div>
+      <button class="sbtn-s on" data-s="dispo" onclick="setStatut('dispo',this)" style="background:rgba(107,203,119,0.12);border-color:rgba(107,203,119,0.35)"><div class="sbtn-s-label" style="color:#6bcb77">● DISPONIBLE</div><div class="sbtn-s-desc">Livraisons en cours 🔥</div></button>
+      <button class="sbtn-s" data-s="15min" onclick="setStatut('15min',this)" style="background:rgba(255,217,61,0.08);border-color:rgba(255,217,61,0.25)"><div class="sbtn-s-label" style="color:#ffd93d">● ~15 MIN</div><div class="sbtn-s-desc">Petite attente</div></button>
+      <button class="sbtn-s" data-s="1h" onclick="setStatut('1h',this)" style="background:rgba(255,217,61,0.08);border-color:rgba(255,217,61,0.25)"><div class="sbtn-s-label" style="color:#ffd93d">● ~1 HEURE</div><div class="sbtn-s-desc">Délai plus long</div></button>
+      <button class="sbtn-s" data-s="pause" onclick="setStatut('pause',this)" style="background:rgba(255,159,67,0.08);border-color:rgba(255,159,67,0.25)"><div class="sbtn-s-label" style="color:#ff9f43">● PAUSE</div><div class="sbtn-s-desc">On revient vite ⏰</div></button>
+      <button class="sbtn-s" data-s="indispo" onclick="setStatut('indispo',this)" style="background:rgba(255,107,107,0.08);border-color:rgba(255,107,107,0.25)"><div class="sbtn-s-label" style="color:#ff6b6b">● INDISPONIBLE</div><div class="sbtn-s-desc">Boutique fermée 🙏</div></button>
+    </div>
+
+    <!-- MESSAGES ÉCRAN DE CHARGEMENT -->
+    <div class="acard">
+      <div class="acard-title">⏳ Messages écran de chargement</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Affiches pendant les 20 secondes d'attente. Présente tes goûts, tes promos...</div>
+      <div id="loader-msgs-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+      <label class="flabel">TITRE DU MESSAGE</label>
+      <input class="finput" id="lm-title" placeholder="ex: 🦅 Nouveauté JnR !">
+      <label class="flabel">DESCRIPTION</label>
+      <input class="finput" id="lm-sub" placeholder="ex: Blueberry Mint disponible dès maintenant">
+      <button class="sbtn" onclick="addLoaderMsg()">AJOUTER CE MESSAGE</button>
+    </div>
+
+    <!-- WHATSAPP SUPPORT -->
+    <div class="acard">
+      <div class="acard-title">📱 Numéro WhatsApp Support</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Visible par les clients dans la page Support.</div>
+      <label class="flabel">NUMÉRO WHATSAPP</label>
+      <input class="finput" id="wa-number" placeholder="ex: +33 6 12 34 56 78">
+      <button class="sbtn" onclick="saveWhatsapp()">SAUVEGARDER</button>
+    </div>
+
+    <!-- PROGRAMME FIDÉLITÉ -->
+    <div class="acard">
+      <div class="acard-title">🎁 Programme de fidélité</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Visible par les clients dans la page Précommande.</div>
+      <div id="loyalty-tiers" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><label class="flabel">NOM DU PALIER</label><input class="finput" id="tier-name" placeholder="ex: SILVER"></div>
+        <div><label class="flabel">POINTS REQUIS</label><input class="finput" id="tier-pts" type="number" placeholder="100"></div>
+      </div>
+      <label class="flabel">RÉCOMPENSE</label>
+      <input class="finput" id="tier-reward" placeholder="ex: -5% sur ta prochaine commande">
+      <button class="sbtn" onclick="addTier()" style="margin-top:0">AJOUTER CE PALIER</button>
+    </div>
+
+    <!-- LIVREURS -->
+    <div class="acard">
+      <div class="acard-title">🛵 Livreurs</div>
+      <div id="admin-livreurs" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+      <label class="flabel">AJOUTER UN LIVREUR</label>
+      <div style="display:flex;gap:8px">
+        <input class="finput" id="new-livreur" placeholder="@username" style="margin-bottom:0;flex:1">
+        <button class="sbtn" style="width:auto;padding:9px 16px;font-size:14px" onclick="addLivreur()">+</button>
+      </div>
+      <label class="flabel" style="margin-top:14px">ZONE DE LIVRAISON</label>
+      <textarea class="finput" id="zone-edit" rows="3" style="resize:none;font-family:sans-serif"></textarea>
+      <button class="sbtn" onclick="saveZone()">SAUVEGARDER LA ZONE</button>
+    </div>
+  </div>
+</div>
+
+<!-- CART -->
+<div id="cart-modal" onclick="if(event.target===this)closeCart()">
+  <div class="cart-panel">
+    <div class="cart-hdr"><div class="cart-title">Mon Panier 🛒</div><button class="xbtn" onclick="closeCart()">✕</button></div>
+    <div id="cart-items"></div>
+    <div id="cart-empty" style="text-align:center;padding:32px;color:var(--muted)"><div style="font-size:40px">😶‍🌫️</div><div style="margin-top:8px">Panier vide</div></div>
+    <div id="cart-bottom" style="display:none">
+      <div class="total-row"><span style="color:var(--muted);font-size:13px">Total</span><span class="total-v" id="cart-total">0 €</span></div>
+      <div style="font-size:12px;color:var(--muted);margin:12px 0 4px;font-weight:500">MODE DE PAIEMENT</div>
+      <div class="pay-methods">
+        <button class="pmethod on" onclick="selPay(this,'sol')"><span class="picon">◎</span><div class="pname-m" style="color:var(--sol)">Solana</div><div class="psub">Crypto SOL</div></button>
+        <button class="pmethod" onclick="selPay(this,'cash')"><span class="picon">💶</span><div class="pname-m">Espèces</div><div class="psub">En main propre</div></button>
+      </div>
+      <button class="cbtn" onclick="checkout()">CONFIRMER LA COMMANDE →</button>
+    </div>
+  </div>
+</div>
+
+<!-- SOL MODAL -->
+<div id="sol-modal" class="modal" onclick="if(event.target===this)closeSol()">
+  <div class="mpanel" style="border:1px solid rgba(153,69,255,0.4)">
+    <div class="mtag" style="color:var(--sol)">PAIEMENT SOLANA</div>
+    <div class="mtitle">Scanner & Payer</div>
+    <div class="msub">Scanne le QR ou copie l'adresse wallet</div>
+    <div style="background:#0d0d1a;border:1px solid rgba(153,69,255,0.25);border-radius:16px;padding:14px;margin-bottom:14px;display:inline-block">
+      <img src="music.mp3" onerror="this.style.display='none'" id="qr-img" style="width:180px;height:180px;border-radius:10px;display:block">
+      <canvas id="qr-canvas" width="180" height="180" style="border-radius:10px;display:block"></canvas>
+    </div>
+    <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.22);border-radius:12px;padding:12px;margin-bottom:12px">
+      <div style="font-size:10px;color:var(--muted);font-family:monospace;margin-bottom:4px">MONTANT</div>
+      <div id="sol-total" style="font-family:sans-serif;font-size:28px;color:var(--sol)">0 €</div>
+    </div>
+    <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;padding:11px 13px;margin-bottom:16px;cursor:pointer" onclick="copyWallet()">
+      <div style="font-size:10px;color:var(--muted);font-family:monospace;margin-bottom:5px">WALLET — cliquer pour copier</div>
+      <div style="font-family:monospace;font-size:9px;color:var(--p5);word-break:break-all;line-height:1.7">HvMCbyzv42c7VP1yQ4mjnGhmeFFKTbyzGDWqjuwKzEG9</div>
+    </div>
+    <button class="mbtn" onclick="solPaid()" style="color:#fff;background:linear-gradient(135deg,#9945FF,#c77dff)">✓ J'AI PAYÉ → LIVRAISON</button>
+    <button class="mlink" onclick="closeSol()">Annuler</button>
+  </div>
+</div>
+
+<!-- LIV MODAL -->
+<div id="liv-modal" class="modal" onclick="if(event.target===this)closeLiv()">
+  <div class="mpanel" style="border:1px solid rgba(107,203,119,0.3);text-align:left">
+    <div class="mtag" style="color:var(--p3)">LIVRAISON</div>
+    <div class="mtitle">📦 Où livrer ?</div>
+    <div class="msub">Ton adresse sera transmise en privé à l'admin.</div>
+    <label class="flabel">NOM COMPLET</label><input class="finput" id="liv-nom" placeholder="Prénom Nom">
+    <label class="flabel">ADRESSE COMPLÈTE</label><input class="finput" id="liv-addr" placeholder="Rue, numéro, code postal, ville...">
+    <label class="flabel">TÉLÉPHONE (optionnel)</label><input class="finput" id="liv-tel" placeholder="06 XX XX XX XX">
+    <div style="background:rgba(107,203,119,0.07);border:1px solid rgba(107,203,119,0.2);border-radius:12px;padding:11px;margin-bottom:16px;font-size:12px;color:var(--muted);line-height:1.6">📬 Livraison estimée selon statut boutique</div>
+    <button class="mbtn" onclick="confirmerLiv()" style="color:#000;background:linear-gradient(135deg,#6bcb77,#4d96ff)">CONFIRMER ✓</button>
+    <button class="mlink" onclick="closeLiv()" style="display:block;margin:0 auto">Annuler</button>
+  </div>
+</div>
+
+<!-- CONF MODAL -->
+<div id="conf-modal" class="modal" onclick="if(event.target===this)closeConf()">
+  <div class="mpanel" style="border:1px solid rgba(107,203,119,0.35)">
+    <div style="font-size:46px;margin-bottom:12px">🎉</div>
+    <div class="mtitle" style="color:var(--p3)">Commande Confirmée !</div>
+    <div class="msub">L'admin reçoit ta commande sur Telegram.</div>
+    <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:13px;padding:15px;text-align:left;margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px;color:var(--muted)">Numéro</span><span id="conf-id" style="font-family:monospace;font-size:12px;color:var(--p5)"></span></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px;color:var(--muted)">Total</span><span id="conf-total" style="font-family:monospace;font-size:13px;color:var(--p2);font-weight:700"></span></div>
+      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="font-size:12px;color:var(--muted)">Paiement</span><span id="conf-pay" style="font-size:12px;font-weight:500"></span></div>
+      <div style="padding:6px 0"><span style="font-size:12px;color:var(--muted)">Livraison</span><div id="conf-addr" style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.5;white-space:pre-line"></div></div>
+    </div>
+    <button class="mbtn" onclick="closeConf()" style="color:#000;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff)">RETOUR À LA BOUTIQUE</button>
+  </div>
+</div>
+
+<button id="music-btn" onclick="toggleMusic()">♪</button>
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════
+var API = 'https://lapeuferie.dongamaxime.workers.dev';
+var ADMIN_IDS = [1090117356, 8371219330];
+var SOL = 'HvMCbyzv42c7VP1yQ4mjnGhmeFFKTbyzGDWqjuwKzEG9';
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+var products = []; // Chargé depuis Supabase au démarrage
+var preorderFormat = 'petit';
+var loaderMessages = [
+  {title: '🦅 Nouveauté JnR !', sub: 'Blueberry Mint, Watermelon Ice et bien plus — découvre notre sélection premium'},
+  {title: '⚡ Razz Bar 30 000 puffs', sub: 'Les plus grandes capacités disponibles — cola ice, blue razz ice, summer dream...'},
+  {title: '🎁 Programme fidélité', sub: 'Cumule des points à chaque commande et débloque des récompenses exclusives'},
+  {title: '🛵 Livraison rapide', sub: 'Livraison à Nancy et alentours — commande et reçois en moins dune heure'},
+];
+var animId = null;
+var loyaltyTiers = [
+  {name:'SILVER', pts:100, reward:'1 produit offert au choix'},
+  {name:'GOLD', pts:300, reward:'-10% sur ta prochaine commande'},
+  {name:'PLATINUM', pts:600, reward:'2 produits offerts + livraison gratuite'},
+  {name:'DIAMOND', pts:1000, reward:'VIP — commandes prioritaires + cadeaux'}
+];
+
+var livreurs = [
+  {id:1,nom:'@lapufferiesav2',dispo:true},
+  {id:2,nom:'@Pufferie_ncy',dispo:true}
+];
+var zoneText = 'Nancy centre · Maxéville · Laxou · Vandœuvre · Essey-lès-Nancy';
+var cart = [], payMethod = 'sol', nextId = 9;
+var selEmoji = '🍎', selCatVal = '', selBadgeVal = '';
+var curSlide = 0, curStatut = 'dispo';
+var tgUser = null, isAdmin = false;
+var musicOn = false;
+
+var EMOJIS = ['🍎','🍇','🍑','🍓','🍋','🥭','🍉','🫐','🌿','🍬','🔥','⚡','🪭','🥢','🎁','🍦','🍰','🫧','🌸','🍫'];
+var BL = {best:'⭐ BEST',new:'NEW',hot:'HOT 🔥',promo:'PROMO'};
+var BC = {best:'bb',new:'bn',hot:'bh',promo:'bp'};
+var STATUTS = {
+  dispo:{label:'Disponible',sub:'Livraisons en cours · On est chauds 🔥',color:'#6bcb77',bg:'rgba(107,203,119,0.12)',bc:'rgba(107,203,119,0.3)'},
+  '15min':{label:'~15 min',sub:'Petite attente · Commandes acceptées',color:'#ffd93d',bg:'rgba(255,217,61,0.1)',bc:'rgba(255,217,61,0.3)'},
+  '1h':{label:'~1 heure',sub:'Délai en cours',color:'#ffd93d',bg:'rgba(255,217,61,0.1)',bc:'rgba(255,217,61,0.3)'},
+  pause:{label:'Pause',sub:'On revient très vite ⏰',color:'#ff9f43',bg:'rgba(255,159,67,0.1)',bc:'rgba(255,159,67,0.3)'},
+  indispo:{label:'Indisponible',sub:'Boutique fermée · Revenez demain 🙏',color:'#ff6b6b',bg:'rgba(255,107,107,0.1)',bc:'rgba(255,107,107,0.3)'}
+};
+
+// ═══════════════════════════════════════════════════════════
+// API — SAUVEGARDE SUPABASE
+// ═══════════════════════════════════════════════════════════
+function apiPost(endpoint, data) {
+  return fetch(API + endpoint, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  }).then(function(r) { return r.json(); });
+}
+
+function apiGet(endpoint) {
+  return fetch(API + endpoint, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } }).then(function(r) { return r.json(); });
+}
+
+// Sauvegarde automatique des produits — appelée après chaque modif
+function saveProduits() {
+  var snapshot = products.slice();
+  console.log('saveProduits: envoi de ' + snapshot.length + ' produits');
+  fetch(API + '/api/produits', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({produits: snapshot, telegram_id: 1090117356})
+  })
+  .then(function(r) {
+    console.log('saveProduits response status:', r.status);
+    return r.json();
+  })
+  .then(function(d) {
+    console.log('saveProduits result:', JSON.stringify(d));
+    if(d.ok) toast('✅ Stock sauvegardé !');
+    else toast('❌ Erreur Supabase');
+  })
+  .catch(function(e) {
+    console.log('saveProduits error:', e.message);
+    toast('❌ Réseau: ' + e.message);
+  });
+}
+
+function saveLivreurs() {
+  apiPost('/api/livreurs', {livreurs: livreurs, zone: zoneText, telegram_id: tgUser ? Number(tgUser.id) : 1090117356})
+    .catch(function(e) { console.error(e); });
+}
+
+// Chargement au démarrage
+function renderAll() {
+  renderProds('all');
+  renderAdminList();
+  updateAdminStats();
+  renderStockSel();
+  updateHomeCount();
+  hideLoader();
+}
+
+var _countdownTimer = null;
+var _msgTimer = null;
+
+function showLoader() {
+  var el = document.getElementById('loading-screen');
+  if(!el) return;
+  el.style.display = 'flex';
+  el.style.opacity = '1';
+  var msgEl = document.getElementById('loader-msg');
+  var subEl = document.getElementById('loader-sub');
+  if(msgEl) msgEl.textContent = '⏳ Chargement en cours…';
+  if(subEl) subEl.textContent = 'Les données arrivent, veuillez patienter.';
+}
+
+function showLoader_DISABLED_23s() {
+  var el = document.getElementById('loading-screen');
+  if(!el) return;
+  el.style.display = 'flex';
+  el.style.opacity = '1';
+
+  // Décompte de 20 secondes
+  var total = 23;
+  var remaining = total;
+  var ring = document.getElementById('countdown-ring');
+  var num = document.getElementById('countdown-num');
+  var circumference = 301.6;
+
+  function updateCountdown() {
+    if(num) num.textContent = remaining;
+    if(ring) ring.style.strokeDashoffset = circumference * (1 - remaining / total);
+    if(remaining > 0) {
+      remaining--;
+      _countdownTimer = setTimeout(updateCountdown, 1000);
+    }
+  }
+  updateCountdown();
+
+  // Messages rotatifs toutes les 4 secondes
+  var msgIdx = 0;
+  var msgEl = document.getElementById('loader-msg');
+  var subEl = document.getElementById('loader-sub');
+
+  function showMsg(idx) {
+    var msgs = loaderMessages;
+    if(!msgs || !msgs.length) return;
+    var m = msgs[idx % msgs.length];
+    if(msgEl) { msgEl.style.opacity='0'; subEl.style.opacity='0'; }
+    setTimeout(function(){
+      if(msgEl) { msgEl.textContent = m.title; msgEl.style.opacity='1'; }
+      if(subEl) { subEl.textContent = m.sub; subEl.style.opacity='1'; }
+    }, 300);
+  }
+
+  showMsg(0);
+  _msgTimer = setInterval(function(){
+    msgIdx++;
+    showMsg(msgIdx);
+  }, 4000);
+}
+
+function hideLoader() {
+  if(_countdownTimer) { clearTimeout(_countdownTimer); _countdownTimer = null; }
+  if(_msgTimer) { clearInterval(_msgTimer); _msgTimer = null; }
+  var el = document.getElementById('loading-screen');
+  if(el) {
+    el.style.opacity = '0';
+    setTimeout(function(){ el.style.display = 'none'; }, 400);
+  }
+}
+
+function loadData() {
+  showLoader();
+  apiGet('/api/all').then(function(data) {
+    if(Array.isArray(data.produits)) {
+      products = data.produits;
+      nextId = products.length > 0 ? Math.max.apply(null, products.map(function(p){ return p.id||0; })) + 1 : 1;
+    }
+    if(data.livreurs && data.livreurs.length > 0) livreurs = data.livreurs;
+    if(data.zone) zoneText = data.zone;
+    if(data.statut) curStatut = data.statut;
+    if(Array.isArray(data.loyalty)) { loyaltyTiers = data.loyalty; renderLoyaltyClient(); renderAdminLoyalty(); }
+    if(typeof data.whatsapp === 'string') whatsappNumber = data.whatsapp;
+    if(Array.isArray(data.loader_msgs) && data.loader_msgs.length > 0) loaderMessages = data.loader_msgs;
+    renderAll();
+    renderLivreurs();
+    renderAdminLivreurs();
+    renderStatut();
+    var ze = document.getElementById('zone-edit');
+    if(ze) ze.value = zoneText;
+    hideLoader();
+    if(Array.isArray(data.loader_msgs) && data.loader_msgs.length === 0) {
+      apiPost('/api/loader_msgs', {msgs: loaderMessages, telegram_id: 1090117356}).catch(function(){});
+    }
+  }).catch(function() {
+    renderAll();
+    hideLoader();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// SPLASH + EAGLES
+// ═══════════════════════════════════════════════════════════
+(function() {
+  var splash = document.getElementById('splash');
+
+  
+  function enter(e) {
+    if(splash.dataset.done) return;
+    splash.dataset.done = '1';
+    if(animId) { cancelAnimationFrame(animId); animId = null; }
+    var m = document.getElementById('music');
+    if(m) { m.volume = 0.6; m.play().catch(function(){}); musicOn = true; }
+    splash.classList.add('hide');
+    setTimeout(function() {
+      splash.style.display = 'none';
+      document.getElementById('app').classList.add('on');
+      document.getElementById('music-btn').style.display = 'flex';
+      initTg();
+      loadData();
+      initEpicker();
+    }, 700);
+  }
+  splash.addEventListener('touchend', function(e){
+    e.preventDefault();
+    enter(e);
+  }, {passive: false});
+  splash.addEventListener('click', enter, false);
+  splash.style.cursor = 'pointer';
+})();
+
+// ═══════════════════════════════════════════════════════════
+// TELEGRAM
+// ═══════════════════════════════════════════════════════════
+function initTg() {
+  try {
+    if(window.Telegram && window.Telegram.WebApp) {
+      var tg = window.Telegram.WebApp;
+      tg.expand(); tg.ready();
+      var u = tg.initDataUnsafe && tg.initDataUnsafe.user;
+      if(u && u.id) { tgUser = u; isAdmin = ADMIN_IDS.indexOf(Number(u.id)) !== -1; }
+    }
+  } catch(e) {}
+  document.querySelectorAll('.admin-tab').forEach(function(t){
+    t.style.display = isAdmin ? 'flex' : 'none';
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// STATUT
+// ═══════════════════════════════════════════════════════════
+function renderStatut() {
+  var s = STATUTS[curStatut] || STATUTS.dispo;
+  var b = document.getElementById('statut-banner');
+  var dot = document.getElementById('sdot');
+  var lbl = document.getElementById('slabel');
+  var sub = document.getElementById('ssub');
+  if(b) { b.style.background = s.bg; b.style.borderColor = s.bc; }
+  if(dot) { dot.style.background = s.color; dot.style.boxShadow = '0 0 8px '+s.color; }
+  if(lbl) { lbl.style.color = s.color; lbl.textContent = s.label; }
+  if(sub) sub.textContent = s.sub;
+  document.querySelectorAll('.sbtn-s').forEach(function(btn) {
+    btn.classList.toggle('on', btn.dataset.s === curStatut);
+  });
+}
+
+function setStatut(s, btn) {
+  curStatut = s; renderStatut();
+  apiPost('/api/statut', {statut: s, telegram_id: tgUser ? Number(tgUser.id) : 1090117356}).catch(function(){});
+  toast('✅ Statut : ' + STATUTS[s].label);
+}
+
+// ═══════════════════════════════════════════════════════════
+// SLIDER
+// ═══════════════════════════════════════════════════════════
+// Slider retiré
+
+// ═══════════════════════════════════════════════════════════
+// PRODUITS
+// ═══════════════════════════════════════════════════════════
+function renderProds(filter) {
+  var list = filter === 'all' ? products : products.filter(function(p){ return p.cat === filter; });
+  var el = document.getElementById('prod-count');
+  if(el) el.textContent = list.length + ' produit' + (list.length > 1 ? 's' : '');
+  var grid = document.getElementById('prod-grid');
+  if(!grid) return;
+  grid.innerHTML = list.map(function(p) {
+    var badge = p.badge && BL[p.badge] ? '<span class="pbadge '+BC[p.badge]+'">'+BL[p.badge]+'</span>' : '';
+    var img = p.photo ? '<img src="'+p.photo+'" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">' : '';
+    var emojiHtml = p.photo ? '' : '<span style="position:relative;z-index:1">'+p.emoji+'</span>';
+    return '<div class="pcard"><div class="pimg">'+img+badge+emojiHtml+'</div><div class="pinfo"><div class="pbrand">'+p.brand+'</div><div class="pname">'+p.name+'</div><div class="pflavor">'+p.flavor+'</div><div class="pfoot"><div class="pprice">'+p.price.toFixed(2)+' €</div><span style="font-size:10px;color:var(--muted)">stock: '+p.stock+'</span></div><button class="abtn" id="ab-'+p.id+'" onclick="addCart('+p.id+')">🛒 Ajouter au panier</button></div></div>';
+  }).join('');
+}
+
+function openBrand(cat) {
+  var home = document.getElementById('view-home');
+  var brand = document.getElementById('view-brand');
+  var title = document.getElementById('brand-title');
+  var grid = document.getElementById('brand-grid');
+  home.style.display = 'none';
+  brand.style.display = 'block';
+  var prods = products.filter(function(p){ return p.cat === cat; });
+  title.innerHTML = cat === 'jnr'
+    ? '<span style="background:linear-gradient(135deg,#ff6b6b,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">🦅 JnR</span>'
+    : '<span style="color:var(--p2)">⚡ Razz Bar</span>';
+  if(!prods.length) {
+    grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:40px">📦</div><div style="margin-top:10px">Aucun produit pour le moment</div></div>';
+    return;
+  }
+  grid.innerHTML = prods.map(function(p) {
+    var stockCls = p.stock > 10 ? 'rgba(107,203,119,0.15)' : p.stock > 0 ? 'rgba(255,217,61,0.15)' : 'rgba(255,107,107,0.15)';
+    var stockColor = p.stock > 10 ? 'var(--p3)' : p.stock > 0 ? 'var(--p2)' : 'var(--p1)';
+    var stockTxt = p.stock > 10 ? '✓ '+p.stock+' en stock' : p.stock > 0 ? '⚠️ '+p.stock+' restants' : '❌ Rupture';
+    var media = p.photo
+      ? '<img src="'+p.photo+'" style="width:70px;height:70px;object-fit:cover;border-radius:12px;flex-shrink:0">'
+      : '<div style="width:70px;height:70px;border-radius:12px;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;font-size:36px;flex-shrink:0">'+p.emoji+'</div>';
+    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;display:flex;gap:14px;align-items:center">'+
+      media+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:15px;font-weight:500;margin-bottom:3px">'+p.name+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);font-style:italic;margin-bottom:8px">'+p.flavor+'</div>'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">'+
+          '<div style="font-size:14px;font-weight:700;background:linear-gradient(135deg,#ff6b6b,#c77dff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">'+p.price.toFixed(2)+' €</div>'+
+          '<div style="font-size:10px;padding:3px 8px;border-radius:8px;background:'+stockCls+';color:'+stockColor+'">'+stockTxt+'</div>'+
+        '</div>'+
+        (p.stock > 0
+          ? '<button onclick="addCart('+p.id+')" style="width:100%;margin-top:8px;border:none;border-radius:10px;padding:9px;font-size:12px;font-weight:600;cursor:pointer;color:#000;background:linear-gradient(135deg,#ff6b6b,#ffd93d,#6bcb77,#4d96ff,#c77dff);-webkit-tap-highlight-color:transparent;touch-action:manipulation">🛒 Ajouter au panier</button>'
+          : '<div style="width:100%;margin-top:8px;text-align:center;font-size:11px;color:var(--p1);padding:7px;background:rgba(255,107,107,0.1);border-radius:10px">Rupture de stock</div>')+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function closeBrand() {
+  document.getElementById('view-home').style.display = 'block';
+  document.getElementById('view-brand').style.display = 'none';
+  updateHomeCount();
+}
+
+function updateHomeCount() {
+  var jnr = products.filter(function(p){ return p.cat === 'jnr'; });
+  var razz = products.filter(function(p){ return p.cat === 'razzbar'; });
+  var jc = document.getElementById('jnr-count');
+  var rc = document.getElementById('razz-count');
+  if(jc) jc.textContent = jnr.length ? jnr.length+' saveur'+(jnr.length>1?'s':'') : '';
+  if(rc) rc.textContent = razz.length ? razz.length+' saveur'+(razz.length>1?'s':'') : '';
+}
+
+
+function filterProds(f, btn) {
+  document.querySelectorAll('.fbtn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  renderProds(f);
+}
+
+// ═══════════════════════════════════════════════════════════
+// CART
+// ═══════════════════════════════════════════════════════════
+function addCart(id) {
+  var p = products.find(function(x){ return x.id === id; });
+  if(!p) return;
+  var ex = cart.find(function(x){ return x.id === id; });
+  if(ex) ex.qty++; else cart.push(Object.assign({}, p, {qty:1}));
+  updateCartCount();
+  var btn = document.getElementById('ab-'+id);
+  if(btn) { btn.classList.add('added'); btn.textContent = '✓'; setTimeout(function(){ btn.classList.remove('added'); btn.textContent = '+'; }, 1200); }
+  toast('✅ '+p.name+' ajouté !');
+}
+
+function updateCartCount() {
+  var n = cart.reduce(function(a,b){ return a+b.qty; }, 0);
+  document.getElementById('cart-count').textContent = n;
+}
+
+function openCart() { renderCart(); document.getElementById('cart-modal').classList.add('on'); }
+function closeCart() { document.getElementById('cart-modal').classList.remove('on'); }
+
+function renderCart() {
+  var items = document.getElementById('cart-items');
+  var empty = document.getElementById('cart-empty');
+  var bottom = document.getElementById('cart-bottom');
+  if(!cart.length) { items.innerHTML = ''; empty.style.display = 'block'; bottom.style.display = 'none'; return; }
+  empty.style.display = 'none'; bottom.style.display = 'block';
+  items.innerHTML = cart.map(function(item) {
+    return '<div class="citem"><div class="cemoji">'+item.emoji+'</div><div style="flex:1"><div class="cname">'+item.brand+' '+item.name+'</div><div class="cflavor">'+item.flavor+'</div><div class="cprice">'+(item.price*item.qty).toFixed(2)+' €</div></div><div class="cqty"><button class="qbtn" onclick="chgQty('+item.id+',-1)">−</button><span style="font-family:monospace;font-size:13px;min-width:20px;text-align:center">'+item.qty+'</span><button class="qbtn" onclick="chgQty('+item.id+',1)">+</button></div></div>';
+  }).join('');
+  document.getElementById('cart-total').textContent = cart.reduce(function(a,b){ return a+b.price*b.qty; }, 0).toFixed(2)+' €';
+}
+
+function chgQty(id, d) {
+  var item = cart.find(function(x){ return x.id === id; });
+  if(!item) return;
+  item.qty += d;
+  if(item.qty <= 0) cart = cart.filter(function(x){ return x.id !== id; });
+  updateCartCount(); renderCart();
+}
+
+function selPay(btn, m) {
+  document.querySelectorAll('.pmethod').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on'); payMethod = m;
+}
+
+function checkout() {
+  closeCart();
+  if(payMethod === 'sol') openSol();
+  else openLiv();
+}
+
+// ═══════════════════════════════════════════════════════════
+// SOL
+// ═══════════════════════════════════════════════════════════
+function openSol() {
+  var total = cart.reduce(function(a,b){ return a+b.price*b.qty; }, 0);
+  document.getElementById('sol-total').textContent = total.toFixed(2)+' €';
+  document.getElementById('sol-modal').classList.add('on');
+}
+function closeSol() { document.getElementById('sol-modal').classList.remove('on'); }
+function solPaid() { closeSol(); openLiv(); }
+function copyWallet() {
+  navigator.clipboard.writeText(SOL).then(function(){ toast('📋 Adresse copiée !'); }).catch(function(){ toast('📋 '+SOL); });
+}
+
+// ═══════════════════════════════════════════════════════════
+// LIVRAISON
+// ═══════════════════════════════════════════════════════════
+function openLiv() {
+  ['liv-nom','liv-addr','liv-tel'].forEach(function(id){ document.getElementById(id).value = ''; });
+  document.getElementById('liv-modal').classList.add('on');
+}
+function closeLiv() { document.getElementById('liv-modal').classList.remove('on'); }
+
+function confirmerLiv() {
+  var addr = document.getElementById('liv-addr').value.trim();
+  if(!addr) { toast('⚠️ Entre ton adresse !'); return; }
+  var nom = document.getElementById('liv-nom').value.trim();
+  var tel = document.getElementById('liv-tel').value.trim();
+  var full = (nom ? nom+'\\n' : '') + addr + (tel ? '\\n📞 '+tel : '');
+  var orderId = (payMethod === 'preorder' ? '#PRE-' : '#LP-')+Math.floor(1000+Math.random()*9000);
+  var total = cart.reduce(function(a,b){ return a+b.price*b.qty; }, 0).toFixed(2);
+  var items = cart.map(function(i){ return i.emoji+' '+i.brand+' '+i.name+(i.flavor?' ('+i.flavor+')':'')+' ×'+i.qty; }).join(', ');
+  var cmd = {orderId:orderId, items:items, total:total, payMethod:payMethod==='sol'?'◎ Solana':'💶 Espèces', livraison:full, date:new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'}), telegram_id: tgUser ? Number(tgUser.id) : null, telegram_name: tgUser ? (tgUser.first_name||'Client') : 'Client'};
+  // Envoyer au serveur
+  apiPost('/api/commande', cmd).catch(function(){});
+  // Local
+  try { var loc = JSON.parse(localStorage.getItem('puff_cmds')||'[]'); loc.push(cmd); localStorage.setItem('puff_cmds', JSON.stringify(loc)); } catch(e) {}
+  closeLiv();
+  document.getElementById('conf-id').textContent = orderId;
+  document.getElementById('conf-total').textContent = total+' €';
+  document.getElementById('conf-pay').textContent = cmd.payMethod;
+  document.getElementById('conf-addr').textContent = full;
+  document.getElementById('conf-modal').classList.add('on');
+  cart = []; updateCartCount();
+}
+function closeConf() { document.getElementById('conf-modal').classList.remove('on'); goPage('shop', document.querySelector('.tab')); }
+
+// ═══════════════════════════════════════════════════════════
+// COMPTE
+// ═══════════════════════════════════════════════════════════
+function renderAccount() {
+  var cmds = [];
+  try { cmds = JSON.parse(localStorage.getItem('puff_cmds')||'[]'); } catch(e) {}
+  var nom = 'Membre', username = '';
+  if(tgUser) {
+    nom = ((tgUser.first_name||'')+(tgUser.last_name?' '+tgUser.last_name:'')).trim()||'Membre';
+    username = tgUser.username ? '@'+tgUser.username : 'ID: '+tgUser.id;
+  }
+  var init = nom.split(' ').map(function(w){ return w[0]||''; }).join('').toUpperCase().slice(0,2)||'👤';
+  document.getElementById('acc-av').textContent = init;
+  document.getElementById('acc-name').textContent = nom;
+  document.getElementById('acc-user').textContent = username;
+  var lvl = document.getElementById('acc-level');
+  if(isAdmin) { lvl.textContent = '⚡ ADMINISTRATEUR'; lvl.style.background = 'rgba(199,125,255,0.2)'; }
+  else lvl.textContent = '✦ MEMBRE';
+  var total = cmds.reduce(function(a,c){ return a+parseFloat(c.total||0); }, 0);
+  var pts = Math.floor(total * 10);
+  document.getElementById('s-cmds').textContent = cmds.length;
+  document.getElementById('s-pts').textContent = pts;
+  document.getElementById('s-total').textContent = total.toFixed(0)+'€';
+  var paliers = [{pts:100,label:'SILVER'},{pts:300,label:'GOLD'},{pts:600,label:'PLATINUM'},{pts:1000,label:'DIAMOND'}];
+  var next = paliers.find(function(p){ return p.pts > pts; })||paliers[3];
+  var prev = paliers[paliers.indexOf(next)-1];
+  var prevPts = prev ? prev.pts : 0;
+  var pct = Math.min(100, Math.round((pts-prevPts)/(next.pts-prevPts)*100))||0;
+  document.getElementById('l-label').textContent = '🎯 Fidélité — Prochain palier : '+next.label+' ('+next.pts+' pts)';
+  document.getElementById('lbar').style.width = pct+'%';
+  document.getElementById('l-pts').textContent = pts+' pts';
+  document.getElementById('l-manq').textContent = (next.pts-pts)+' pts manquants';
+  document.getElementById('l-next').textContent = next.pts+' pts';
+  var ol = document.getElementById('orders-list');
+  if(!cmds.length) { ol.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)"><div style="font-size:36px">📭</div><div style="margin-top:10px;font-size:13px">Aucune commande pour le moment</div></div>'; return; }
+  ol.innerHTML = cmds.slice().reverse().map(function(c) {
+    return '<div class="ocard"><div style="flex:1"><div class="oid">'+c.orderId+'</div><div class="oname">'+c.items+'</div><div class="odate">'+c.date+'</div></div><div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:4px"><div class="oprice">'+parseFloat(c.total||0).toFixed(2)+' €</div><div class="otag">Confirmé ✓</div></div></div>';
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// INFOS / LIVREURS
+// ═══════════════════════════════════════════════════════════
+function renderLivreurs() {
+  var el = document.getElementById('livreurs-list');
+  var zd = document.getElementById('zone-display');
+  if(zd) zd.textContent = zoneText;
+  if(!el) return;
+  if(!livreurs.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Aucun livreur configuré</div>'; return; }
+  el.innerHTML = livreurs.map(function(l) {
+    var color = l.dispo ? '#6bcb77' : '#ff6b6b';
+    return '<div class="ocard"><div style="width:10px;height:10px;border-radius:50%;background:'+color+';box-shadow:0 0 8px '+color+';flex-shrink:0;animation:pulse 2s ease-in-out infinite"></div><div style="flex:1"><div class="oname">'+l.nom+'</div></div><div style="font-size:11px;font-weight:600;color:'+color+'">'+(l.dispo?'Disponible':'Indisponible')+'</div></div>';
+  }).join('');
+}
+
+function renderAdminLivreurs() {
+  var el = document.getElementById('admin-livreurs');
+  if(!el) return;
+  var ze = document.getElementById('zone-edit');
+  if(ze) ze.value = zoneText;
+  if(!livreurs.length) { el.innerHTML = '<div style="color:var(--muted);font-size:12px">Aucun livreur</div>'; return; }
+  el.innerHTML = livreurs.map(function(l) {
+    var color = l.dispo ? '#6bcb77' : '#ff6b6b';
+    return '<div class="apitem"><div class="apinfo"><div class="apname">'+l.nom+'</div></div><button onclick="toggleLivreur('+l.id+')" style="background:none;border:1px solid '+color+';color:'+color+';border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:monospace;-webkit-tap-highlight-color:transparent">'+(l.dispo?'🟢 Dispo':'🔴 Indispo')+'</button><div class="ibtns"><button class="ibtn del" onclick="delLivreur('+l.id+')">🗑</button></div></div>';
+  }).join('');
+}
+
+function addLivreur() {
+  var nom = document.getElementById('new-livreur').value.trim();
+  if(!nom) { toast('⚠️ Entre un @username'); return; }
+  if(!nom.startsWith('@')) nom = '@'+nom;
+  var newId = livreurs.length ? Math.max.apply(null, livreurs.map(function(l){ return l.id; }))+1 : 1;
+  livreurs.push({id:newId, nom:nom, dispo:true});
+  document.getElementById('new-livreur').value = '';
+  renderAdminLivreurs(); renderLivreurs();
+  saveLivreurs();
+  toast('✅ '+nom+' ajouté');
+}
+
+function toggleLivreur(id) {
+  var l = livreurs.find(function(x){ return x.id === id; });
+  if(!l) return;
+  l.dispo = !l.dispo;
+  renderAdminLivreurs(); renderLivreurs();
+  saveLivreurs();
+  toast(l.nom+' : '+(l.dispo?'🟢 Disponible':'🔴 Indisponible'));
+}
+
+function delLivreur(id) {
+  var l = livreurs.find(function(x){ return x.id === id; });
+  livreurs = livreurs.filter(function(x){ return x.id !== id; });
+  renderAdminLivreurs(); renderLivreurs();
+  saveLivreurs();
+  toast('🗑 '+(l?l.nom:'Livreur')+' supprimé');
+}
+
+function saveZone() {
+  var val = document.getElementById('zone-edit').value.trim();
+  if(!val) { toast('⚠️ Zone vide'); return; }
+  zoneText = val;
+  renderLivreurs();
+  saveLivreurs();
+  toast('✅ Zone mise à jour');
+}
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN — PRODUITS
+// ═══════════════════════════════════════════════════════════
+function initEpicker() {
+  var el = document.getElementById('epicker');
+  if(!el) return;
+  el.innerHTML = EMOJIS.map(function(e){ return '<div class="eopt'+(e===selEmoji?' on':'')+'" onclick="pickEmoji(this,\\''+e+'\\')">'+e+'</div>'; }).join('');
+}
+
+function pickEmoji(el, e) {
+  document.querySelectorAll('.eopt').forEach(function(x){ x.classList.remove('on'); });
+  el.classList.add('on');
+  selEmoji = e;
+  // Si on rechoisit un emoji, supprimer la photo
+  removePhoto();
+}
+
+function removePhoto() {
+  var pp = document.getElementById('photo-prev');
+  var rb = document.getElementById('remove-photo-btn');
+  var pi = document.getElementById('photo-input');
+  if(pp) { pp.src = ''; pp.style.display = 'none'; }
+  if(rb) rb.style.display = 'none';
+  if(pi) pi.value = '';
+}
+function pickCat(el, c) { document.querySelectorAll('.copt').forEach(function(x){ x.classList.remove('on'); }); el.classList.add('on'); selCatVal = c; }
+function pickBadge(el, b) { document.querySelectorAll('.bopt').forEach(function(x){ x.classList.remove('on'); }); el.classList.add('on'); selBadgeVal = b; }
+
+function previewPhoto(input) {
+  if(!input.files||!input.files[0]) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var p = document.getElementById('photo-prev');
+    p.src = e.target.result;
+    p.style.display = 'block';
+    // Désactiver l'emoji quand une photo est choisie
+    selEmoji = '';
+    document.querySelectorAll('.eopt').forEach(function(x){ x.classList.remove('on'); });
+    var rb = document.getElementById('remove-photo-btn');
+    if(rb) rb.style.display = 'block';
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+function addProd() {
+  var brand = document.getElementById('f-brand').value.trim();
+  var name = document.getElementById('f-name').value.trim();
+  var flavor = document.getElementById('f-flavor').value.trim();
+  var price = parseFloat(document.getElementById('f-price').value);
+  var stock = parseInt(document.getElementById('f-stock').value)||0;
+  if(!brand||!name||!flavor||isNaN(price)||price<=0) { toast('⚠️ Remplis tous les champs !'); return; }
+  if(!selCatVal) { toast('⚠️ Choisis une catégorie !'); return; }
+  var pp = document.getElementById('photo-prev');
+  var photo = pp && pp.style.display !== 'none' ? pp.src : null;
+  products.push({id:nextId++, brand:brand, name:name, flavor:flavor, price:price, stock:stock, emoji:selEmoji, cat:selCatVal, badge:selBadgeVal, photo:photo});
+  // Reset
+  ['f-brand','f-name','f-flavor','f-price','f-stock'].forEach(function(id){ document.getElementById(id).value = ''; });
+  selEmoji = '🍎'; selCatVal = ''; selBadgeVal = '';
+  initEpicker();
+  document.querySelectorAll('.copt,.bopt').forEach(function(x){ x.classList.remove('on'); });
+  document.querySelector('.bnone').classList.add('on');
+  if(pp) pp.style.display = 'none';
+  document.getElementById('photo-input').value = '';
+  // Render
+  renderAdminList(); updateAdminStats(); renderStockSel(); updateHomeCount();
+  // Si on est dans une vue marque ouverte, la rafraîchir
+  var brandView = document.getElementById('view-brand');
+  if(brandView && brandView.style.display !== 'none') {
+    openBrand(selCatVal || 'jnr');
+  }
+  // SAUVEGARDER
+  toast('✅ '+brand+' '+name+' ajouté ! Sauvegarde...');
+  saveProduits();
+}
+
+function renderAdminList() {
+  var el = document.getElementById('admin-list');
+  if(!el) return;
+  el.innerHTML = products.map(function(p) {
+    return '<div class="apitem"><div class="apemoji">'+p.emoji+'</div><div class="apinfo"><div class="apname">'+p.brand+' — '+p.name+'</div><div class="apmeta">'+p.cat+' · '+p.price.toFixed(2)+' € · stock: '+p.stock+'</div></div><div class="ibtns"><button class="ibtn del" onclick="delProd('+p.id+')">🗑</button></div></div>';
+  }).join('');
+}
+
+function updateAdminStats() {
+  var el = document.getElementById('a-prods'); if(el) el.textContent = products.length;
+  var el2 = document.getElementById('a-low'); if(el2) el2.textContent = products.filter(function(p){ return p.stock<=5; }).length;
+}
+
+function renderStockSel() {
+  var el = document.getElementById('stock-sel');
+  if(!el) return;
+  el.innerHTML = products.map(function(p){ return '<option value="'+p.id+'">'+p.emoji+' '+p.brand+' '+p.name+' (stock: '+p.stock+')</option>'; }).join('');
+}
+
+function delProd(id) {
+  var p = products.find(function(x){ return x.id === id; });
+  if(!confirm('Supprimer '+p.name+' ?')) return;
+  products = products.filter(function(x){ return x.id !== id; });
+  cart = cart.filter(function(x){ return x.id !== id; });
+  updateCartCount();
+  renderProds('all'); renderAdminList(); updateAdminStats(); renderStockSel();
+  // SAUVEGARDER
+  toast('🗑 '+p.name+' supprimé — Sauvegarde...');
+  saveProduits();
+}
+
+function updateStock() {
+  var id = parseInt(document.getElementById('stock-sel').value);
+  var qty = parseInt(document.getElementById('stock-qty').value);
+  if(isNaN(qty)||qty<0) { toast('⚠️ Quantité invalide'); return; }
+  var p = products.find(function(x){ return x.id === id; });
+  if(!p) return;
+  p.stock = qty;
+  renderProds('all'); renderAdminList(); updateAdminStats(); renderStockSel();
+  // SAUVEGARDER
+  toast('📦 Stock mis à jour — Sauvegarde...');
+  saveProduits();
+}
+
+// ═══════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════
+function goPage(p, tab) {
+  if(p === 'admin' && !isAdmin) return;
+  document.querySelectorAll('.page').forEach(function(x){ x.classList.remove('active'); x.style.display = 'none'; });
+  document.querySelectorAll('.bnav-item').forEach(function(x){ x.classList.remove('active'); });
+  var page = document.getElementById('page-'+p);
+  if(page) { page.style.display = 'block'; page.classList.add('active'); }
+  var navEl = document.getElementById('nav-'+p);
+  if(navEl) navEl.classList.add('active');
+  if(p === 'account') renderAccount();
+  if(p === 'infos') renderLivreurs();
+  if(p === 'loyalty') renderLoyaltyPage();
+  if(p === 'support') renderSupport();
+  if(p === 'admin') { renderAdminList(); updateAdminStats(); renderStockSel(); renderAdminLivreurs(); renderLoyaltyProgram(); renderLoaderMsgs(); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// MUSIC
+// ═══════════════════════════════════════════════════════════
+function toggleMusic() {
+  var btn = document.getElementById('music-btn');
+  var m = document.getElementById('music');
+  if(musicOn) { m.pause(); musicOn = false; btn.textContent = '♪'; toast('🔇 Musique off'); }
+  else { m.play().catch(function(){}); musicOn = true; btn.textContent = '♫'; toast('🎵 Musique on'); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRÉCOMMANDE
+// ═══════════════════════════════════════════════════════════
+function selFormat(btn, f) {
+  document.querySelectorAll('#pre-small,#pre-big').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  preorderFormat = f;
+}
+
+function submitPreorder() {
+  var brand = document.getElementById('pre-brand').value;
+  var flavor = document.getElementById('pre-flavor').value.trim();
+  var qty = document.getElementById('pre-qty').value || '1';
+  var msg = document.getElementById('pre-msg').value.trim();
+  if(!brand) { toast('⚠️ Choisis une marque !'); return; }
+  if(!flavor) { toast('⚠️ Précise le goût souhaité !'); return; }
+  var nom = tgUser ? (tgUser.first_name || 'Client') : 'Client';
+  var username = tgUser ? ('@'+(tgUser.username||tgUser.id)) : 'inconnu';
+  var preId = '#PRE-'+Math.floor(1000+Math.random()*9000);
+  var preorder = {
+    type: 'preorder',
+    orderId: preId,
+    brand: brand,
+    flavor: flavor,
+    format: preorderFormat,
+    qty: qty,
+    msg: msg,
+    telegram_name: nom,
+    telegram_id: tgUser ? Number(tgUser.id) : null,
+    date: new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})
+  };
+  apiPost('/api/commande', preorder).catch(function(){});
+  // Reset
+  document.getElementById('pre-brand').value = '';
+  document.getElementById('pre-flavor').value = '';
+  document.getElementById('pre-qty').value = '1';
+  document.getElementById('pre-msg').value = '';
+  toast('✅ Précommande envoyée ! On te contacte dès que cest dispo.');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SUPPORT
+// ═══════════════════════════════════════════════════════════
+var whatsappNumber = '';
+
+function renderSupport() {
+  var el = document.getElementById('whatsapp-display');
+  if(!el) return;
+  if(whatsappNumber) {
+    var clean = whatsappNumber.replace(/\\D/g,'');
+    el.innerHTML = '<a href="https://wa.me/'+clean+'" target="_blank" style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(37,211,102,0.1),rgba(37,211,102,0.05));border:1px solid rgba(37,211,102,0.25);border-radius:14px;padding:16px;text-decoration:none;color:var(--text);-webkit-tap-highlight-color:transparent">'+
+      '<div style="width:44px;height:44px;border-radius:50%;background:rgba(37,211,102,0.15);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">💬</div>'+
+      '<div style="flex:1">'+
+        '<div style="font-size:14px;font-weight:600;color:#25D366">'+whatsappNumber+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">Clique pour nous écrire sur WhatsApp</div>'+
+      '</div>'+
+      '<div style="font-size:18px;color:var(--muted)">›</div>'+
+    '</a>';
+  } else {
+    el.innerHTML = '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;color:var(--muted);font-size:13px">📞 Numéro WhatsApp bientôt disponible</div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// FIDÉLITÉ
+// ═══════════════════════════════════════════════════════════
+function renderLoyaltyPage() {
+  // Calculer les points du client
+  var cmds = [];
+  try { cmds = JSON.parse(localStorage.getItem('puff_cmds')||'[]'); } catch(e) {}
+  var total = cmds.reduce(function(a,c){ return a+parseFloat(c.total||0); }, 0);
+  var pts = Math.floor(total * 10);
+
+  // Trouver le palier actuel et suivant
+  var currentTier = null, nextTier = null;
+  for(var i = 0; i < loyaltyTiers.length; i++) {
+    if(pts >= loyaltyTiers[i].pts) currentTier = loyaltyTiers[i];
+    else if(!nextTier) nextTier = loyaltyTiers[i];
+  }
+  var icons = ['✦','⭐','💎','👑','🔥'];
+  var colors = ['#8884aa','#ffd93d','#4d96ff','#c77dff','#ff6b6b'];
+  var tierIdx = currentTier ? loyaltyTiers.indexOf(currentTier) : -1;
+  var icon = tierIdx >= 0 ? icons[Math.min(tierIdx, icons.length-1)] : '✦';
+  var color = tierIdx >= 0 ? colors[Math.min(tierIdx, colors.length-1)] : 'var(--muted)';
+
+  var iconEl = document.getElementById('loyalty-icon');
+  var nameEl = document.getElementById('loyalty-tier-name');
+  var ptsEl = document.getElementById('loyalty-pts-display');
+  var barEl = document.getElementById('loyalty-bar');
+  var curPtsEl = document.getElementById('loyalty-current-pts');
+  var nextRewardEl = document.getElementById('loyalty-next-reward');
+  var nextPtsEl = document.getElementById('loyalty-next-pts');
+
+  if(iconEl) iconEl.textContent = icon;
+  if(nameEl) { nameEl.textContent = currentTier ? currentTier.name : 'MEMBRE'; nameEl.style.color = color; }
+  if(ptsEl) ptsEl.textContent = pts+' points cumulés';
+
+  var prevPts = currentTier ? currentTier.pts : 0;
+  var targetPts = nextTier ? nextTier.pts : (currentTier ? currentTier.pts : 100);
+  var pct = nextTier ? Math.min(100, Math.round((pts-prevPts)/(targetPts-prevPts)*100)) : 100;
+  if(barEl) barEl.style.width = pct+'%';
+  if(curPtsEl) curPtsEl.textContent = pts+' pts';
+  if(nextRewardEl) nextRewardEl.textContent = nextTier ? (targetPts-pts)+' pts manquants' : '🏆 Niveau max !';
+  if(nextPtsEl) nextPtsEl.textContent = nextTier ? targetPts+' pts' : '';
+
+  // Afficher les paliers
+  renderLoyaltyTiersList();
+}
+
+function renderLoyaltyProgram() {
+
+  renderLoyaltyTiersList();
+}
+
+function renderLoyaltyTiersList() {
+  // Page fidélité client
+  var el = document.getElementById('loyalty-tiers-display');
+  if(el) {
+    var icons = ['✦','⭐','💎','👑','🔥'];
+    var colors = ['#8884aa','#ffd93d','#4d96ff','#c77dff','#ff6b6b'];
+    if(!loyaltyTiers.length) {
+      el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted)">Programme en cours de création...</div>';
+    } else {
+      el.innerHTML = loyaltyTiers.map(function(t, i) {
+        var color = colors[Math.min(i, colors.length-1)];
+        var icon = icons[Math.min(i, icons.length-1)];
+        return '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;align-items:center;gap:14px">' +
+          '<div style="font-size:32px;width:44px;text-align:center">'+icon+'</div>' +
+          '<div style="flex:1">' +
+            '<div style="font-size:15px;font-weight:600;color:'+color+'">'+t.name+'</div>' +
+            '<div style="font-size:11px;color:var(--muted);margin:3px 0">'+t.pts+' points requis</div>' +
+            '<div style="font-size:12px;color:var(--text)">🎁 '+t.reward+'</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+  }
+
+  // Côté admin
+  var adminEl = document.getElementById('loyalty-tiers');
+  if(adminEl) {
+    if(!loyaltyTiers.length) {
+      adminEl.innerHTML = '<div style="color:var(--muted);font-size:12px">Aucun palier configuré</div>';
+    } else {
+      adminEl.innerHTML = loyaltyTiers.map(function(t, i) {
+        return '<div class="apitem">' +
+          '<div class="apinfo">' +
+            '<div class="apname">'+t.name+' — '+t.pts+' pts</div>' +
+            '<div class="apmeta">'+t.reward+'</div>' +
+          '</div>' +
+          '<div class="ibtns"><button class="ibtn del" onclick="deleteTier('+i+')">🗑</button></div>' +
+        '</div>';
+      }).join('');
+    }
+  }
+}
+
+function addTier() {
+  var name = document.getElementById('tier-name').value.trim().toUpperCase();
+  var pts = parseInt(document.getElementById('tier-pts').value);
+  var reward = document.getElementById('tier-reward').value.trim();
+  if(!name || isNaN(pts) || pts <= 0 || !reward) { toast('⚠️ Remplis tous les champs !'); return; }
+  loyaltyTiers.push({name:name, pts:pts, reward:reward});
+  loyaltyTiers.sort(function(a,b){ return a.pts - b.pts; });
+  document.getElementById('tier-name').value = '';
+  document.getElementById('tier-pts').value = '';
+  document.getElementById('tier-reward').value = '';
+  renderLoyaltyProgram();
+  saveLoyalty();
+  toast('✅ Palier '+name+' ajouté !');
+}
+
+function deleteTier(i) {
+  var t = loyaltyTiers[i];
+  loyaltyTiers.splice(i, 1);
+  renderLoyaltyProgram();
+  saveLoyalty();
+  toast('🗑 Palier '+t.name+' supprimé');
+}
+
+function saveLoyalty() {
+  apiPost('/api/loyalty', {tiers: loyaltyTiers, telegram_id: tgUser ? Number(tgUser.id) : 1090117356})
+    .catch(function(){});
+}
+
+function renderLoaderMsgs() {
+  var el = document.getElementById('loader-msgs-list');
+  if(!el) return;
+  if(!loaderMessages.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:12px">Aucun message configuré</div>';
+    return;
+  }
+  el.innerHTML = loaderMessages.map(function(m, i) {
+    return '<div class="apitem"><div class="apinfo"><div class="apname">'+m.title+'</div><div class="apmeta">'+m.sub+'</div></div><div class="ibtns"><button class="ibtn del" onclick="delLoaderMsg('+i+')">🗑</button></div></div>';
+  }).join('');
+}
+
+function addLoaderMsg() {
+  var title = document.getElementById('lm-title').value.trim();
+  var sub = document.getElementById('lm-sub').value.trim();
+  if(!title || !sub) { toast('⚠️ Remplis les deux champs !'); return; }
+  loaderMessages.push({title: title, sub: sub});
+  document.getElementById('lm-title').value = '';
+  document.getElementById('lm-sub').value = '';
+  renderLoaderMsgs();
+  saveLoaderMsgs();
+  toast('✅ Message ajouté !');
+}
+
+function delLoaderMsg(i) {
+  loaderMessages.splice(i, 1);
+  renderLoaderMsgs();
+  saveLoaderMsgs();
+  toast('🗑 Message supprimé');
+}
+
+function saveLoaderMsgs() {
+  apiPost('/api/loader_msgs', {msgs: loaderMessages, telegram_id: tgUser ? Number(tgUser.id) : 1090117356})
+    .catch(function(){});
+}
+
+function loadLoaderMsgs() {
+  apiGet('/api/loader_msgs').then(function(d) {
+    if(Array.isArray(d)) {
+      // Toujours utiliser Supabase, même si vide
+      loaderMessages = d;
+    }
+    renderLoaderMsgs();
+  }).catch(function(){ renderLoaderMsgs(); });
+}
+
+function saveWhatsapp() {
+  var num = document.getElementById('wa-number').value.trim();
+  whatsappNumber = num;
+  apiPost('/api/whatsapp', {number: num, telegram_id: tgUser ? Number(tgUser.id) : 1090117356})
+    .catch(function(){});
+  renderSupport();
+  toast('✅ WhatsApp mis à jour !');
+}
+
+function loadWhatsapp() {
+  apiGet('/api/whatsapp').then(function(d) {
+    if(d && d.number) {
+      whatsappNumber = d.number;
+      var inp = document.getElementById('wa-number');
+      if(inp) inp.value = whatsappNumber;
+    }
+  }).catch(function(){});
+}
+
+function loadLoyalty() {
+  apiGet('/api/loyalty').then(function(data) {
+    if(data && data.length > 0) loyaltyTiers = data;
+    renderLoyaltyProgram();
+  }).catch(function(){ renderLoyaltyProgram(); });
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(t._t);
+  t._t = setTimeout(function(){ t.classList.remove('on'); }, 2600);
+}
+</script>
+</body>
+</html>
+`;
+
+// ── Supabase helpers ──────────────────────────────────────
+async function sbGet(key, sbKey) {
+  const r = await fetch(`${SB_URL}/rest/v1/pufferie_state?key=eq.${key}&select=value`, {
+    headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` }
+  });
+  const data = await r.json();
+  return data?.[0]?.value ?? null;
+}
+
+async function sbSet(key, value, sbKey) {
+  const r = await fetch(`${SB_URL}/rest/v1/pufferie_state`, {
+    method: "POST",
+    headers: {
+      apikey: sbKey,
+      Authorization: `Bearer ${sbKey}`,
+      "Content-Type": "application/json",
+      Prefer: "resolution=merge-duplicates,return=minimal"
+    },
+    body: JSON.stringify({ key, value })
+  });
+  return r.status < 300;
+}
+
+// ── CORS headers ──────────────────────────────────────────
+function cors(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Cache-Control": "no-store"
+    }
+  });
+}
+
+// ── Telegram notification ─────────────────────────────────
+async function tgSend(chatId, text, replyMarkup = null) {
+  const body = { chat_id: chatId, text };
+  if (replyMarkup) body.reply_markup = replyMarkup;
+  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+}
+
+// ── Main handler ──────────────────────────────────────────
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const SB_KEY = env.SUPABASE_KEY;
+
+    // OPTIONS preflight
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type"
+        }
+      });
+    }
+
+    // ── Serve mini app HTML ───────────────────────────────
+    if (path === "/" || path === "/app" || path === "/index.html") {
+      return new Response(APP_HTML, {
+        headers: { "Content-Type": "text/html; charset=utf-8" }
+      });
+    }
+
+    // ── API routes ──────────────────────────────────────
+    if (path === "/api/all" && request.method === "GET") {
+      const [produits, livreurs, zone, statut, loyalty, whatsapp, loader_msgs] = await Promise.all([
+        sbGet("produits", SB_KEY),
+        sbGet("livreurs", SB_KEY),
+        sbGet("zone", SB_KEY),
+        sbGet("statut", SB_KEY),
+        sbGet("loyalty", SB_KEY),
+        sbGet("whatsapp", SB_KEY),
+        sbGet("loader_msgs", SB_KEY)
+      ]);
+      return cors({
+        produits: produits || [],
+        livreurs: livreurs || [],
+        zone: zone || "Nancy centre · Maxéville · Laxou · Vandœuvre · Essey-lès-Nancy",
+        statut: statut || "dispo",
+        loyalty: loyalty || [],
+        whatsapp: whatsapp || "",
+        loader_msgs: loader_msgs || []
+      });
+    }
+
+    if (path === "/api/statut" && request.method === "GET") {
+      const val = await sbGet("statut", SB_KEY);
+      return cors({ statut: val || "dispo" });
+    }
+
+    if (path === "/api/statut" && request.method === "POST") {
+      const data = await request.json();
+      await sbSet("statut", data.statut || "dispo", SB_KEY);
+      return cors({ ok: true });
+    }
+
+    if (path === "/api/produits" && request.method === "GET") {
+      const val = await sbGet("produits", SB_KEY);
+      return cors(val || []);
+    }
+
+    if (path === "/api/produits" && request.method === "POST") {
+      const data = await request.json();
+      const ok = await sbSet("produits", data.produits || [], SB_KEY);
+      console.log(`Save produits: ${data.produits?.length} produits, ok=${ok}`);
+      if (ok) return cors({ ok: true, count: data.produits?.length });
+      return cors({ ok: false, error: "Supabase save failed" }, 500);
+    }
+
+    if (path === "/api/livreurs" && request.method === "GET") {
+      const [livreurs, zone] = await Promise.all([
+        sbGet("livreurs", SB_KEY),
+        sbGet("zone", SB_KEY)
+      ]);
+      return cors({
+        livreurs: livreurs || [],
+        zone: zone || "Nancy centre · Maxéville · Laxou · Vandœuvre · Essey-lès-Nancy"
+      });
+    }
+
+    if (path === "/api/livreurs" && request.method === "POST") {
+      const data = await request.json();
+      await Promise.all([
+        sbSet("livreurs", data.livreurs || [], SB_KEY),
+        sbSet("zone", data.zone || "", SB_KEY)
+      ]);
+      return cors({ ok: true });
+    }
+
+    if (path === "/api/loyalty" && request.method === "GET") {
+      const val = await sbGet("loyalty", SB_KEY);
+      return cors(val || []);
+    }
+
+    if (path === "/api/loyalty" && request.method === "POST") {
+      const data = await request.json();
+      await sbSet("loyalty", data.tiers || [], SB_KEY);
+      return cors({ ok: true });
+    }
+
+    if (path === "/api/whatsapp" && request.method === "GET") {
+      const val = await sbGet("whatsapp", SB_KEY);
+      return cors({ number: val || "" });
+    }
+
+    if (path === "/api/whatsapp" && request.method === "POST") {
+      const data = await request.json();
+      await sbSet("whatsapp", data.number || "", SB_KEY);
+      return cors({ ok: true });
+    }
+
+    if (path === "/api/loader_msgs" && request.method === "GET") {
+      const val = await sbGet("loader_msgs", SB_KEY);
+      return cors(val || []);
+    }
+
+    if (path === "/api/loader_msgs" && request.method === "POST") {
+      const data = await request.json();
+      await sbSet("loader_msgs", data.msgs || [], SB_KEY);
+      return cors({ ok: true });
+    }
+
+    if (path === "/api/whoami" && request.method === "POST") {
+      const data = await request.json();
+      const uid = Number(data.uid || 0);
+      return cors({ uid, is_admin: ADMIN_IDS.includes(uid) });
+    }
+
+    if (path === "/api/commande" && request.method === "POST") {
+      const commande = await request.json();
+      const orderId = commande.orderId || "?";
+
+      // Sauvegarder dans Supabase
+      const existing = (await sbGet("commandes", SB_KEY)) || [];
+      existing.push(commande);
+      await sbSet("commandes", existing, SB_KEY);
+
+      // Notifier les admins
+      const isPreorder = commande.type === "preorder";
+      const txtAdmin = isPreorder
+        ? `⭐ PRÉCOMMANDE !\n\n👤 ${commande.telegram_name || "?"}\n📦 ${commande.brand} — ${commande.flavor}\n📏 Format : ${commande.format} × ${commande.qty}\n📝 ${commande.msg || "Aucun message"}`
+        : `🛒 NOUVELLE COMMANDE !\n\n📋 ${orderId}\n🛍 ${commande.items}\n💰 ${commande.total} €\n💳 ${commande.payMethod}\n📍 ${commande.livraison}`;
+
+      const txtLivreur = isPreorder ? txtAdmin : `🚨 COMMANDE À LIVRER\n\n📋 ${orderId}\n🛍 ${commande.items}\n💰 ${commande.total} €\n💳 ${commande.payMethod}\n📍 ${commande.livraison}\n\n👇 Confirme ci-dessous`;
+
+      const kb = isPreorder ? null : {
+        inline_keyboard: [[
+          { text: "✅ Confirmer", callback_data: `confirm_${orderId}` },
+          { text: "⏰ Horaire", callback_data: `horaire_${orderId}` }
+        ]]
+      };
+
+      await Promise.all(ADMIN_IDS.map(id => tgSend(id, txtAdmin)));
+      if (!isPreorder) await Promise.all(ADMIN_IDS.map(id => tgSend(id, txtLivreur, kb)));
+
+      return cors({ ok: true });
+    }
+
+    // ── Webhook Telegram ──────────────────────────────────
+    if (path === `/webhook/${BOT_TOKEN}` && request.method === "POST") {
+      const update = await request.json();
+
+      if (update.message?.text === "/start") {
+        const user = update.message.from;
+        const uid = user.id;
+        const isAdmin = ADMIN_IDS.includes(uid);
+        const nom = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+        const role = isAdmin ? "👑 Administrateur" : "👤 Client";
+        const webapp = "https://lapeuferie.dongamaxime.workers.dev/";
+
+        const texte = `💨 Mon Profil\n\n👤 Nom : ${nom}\n🆔 ID : ${uid}\nRole : ${role}`;
+        const kb = {
+          inline_keyboard: isAdmin ? [
+            [{ text: "📊 Statut boutique", callback_data: "admin_statut" }],
+            [{ text: "📦 Commandes reçues", callback_data: "admin_commandes" }],
+            [{ text: "🛍️ Ouvrir la boutique", web_app: { url: webapp } }]
+          ] : [[{ text: "🛍️ Ouvrir la boutique", web_app: { url: webapp } }]]
+        };
+        await tgSend(uid, texte, kb);
+      }
+
+      if (update.callback_query) {
+        const query = update.callback_query;
+        const uid = query.from.id;
+        const data = query.data;
+        const SB_KEY = env.SUPABASE_KEY;
+
+        // Répondre au callback
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ callback_query_id: query.id })
+        });
+
+        if (data.startsWith("confirm_")) {
+          const orderId = data.replace("confirm_", "");
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: query.message.chat.id,
+              message_id: query.message.message_id,
+              text: `✅ Commande ${orderId} confirmée !`,
+              reply_markup: { inline_keyboard: [[{ text: "⏰ Modifier horaire", callback_data: `horaire_${orderId}` }]] }
+            })
+          });
+          // Notifier le client
+          const commandes = (await sbGet("commandes", SB_KEY)) || [];
+          const cmd = commandes.find(c => c.orderId === orderId);
+          if (cmd?.telegram_id) await tgSend(cmd.telegram_id, `✅ Ta commande ${orderId} est confirmée !\n🛵 Le livreur est en route !`);
+        }
+
+        if (data.startsWith("horaire_")) {
+          const orderId = data.replace("horaire_", "");
+          const isPreorder = orderId.startsWith("#PRE-");
+          const horaires = isPreorder ? ["4 jours", "7 jours", "10 jours", "Impossible"] : ["15 min", "30 min", "45 min", "1h", "1h30", "2h"];
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: query.message.chat.id,
+              message_id: query.message.message_id,
+              text: isPreorder ? `📦 Délai pour ${orderId} ?` : `⏰ Délai pour ${orderId} ?`,
+              reply_markup: { inline_keyboard: horaires.map(h => [{ text: h, callback_data: `settime_${orderId}_${h}` }]) }
+            })
+          });
+        }
+
+        if (data.startsWith("settime_")) {
+          const parts = data.replace("settime_", "").split("_");
+          const heure = parts.pop();
+          const orderId = parts.join("_");
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: query.message.chat.id,
+              message_id: query.message.message_id,
+              text: `✅ Délai confirmé : ${heure}\n📋 Commande ${orderId}`
+            })
+          });
+          const commandes = (await sbGet("commandes", SB_KEY)) || [];
+          const cmd = commandes.find(c => c.orderId === orderId);
+          if (cmd?.telegram_id) await tgSend(cmd.telegram_id, `🛵 Livraison dans ${heure} !\n📋 Commande ${orderId}`);
+        }
+
+        if (data === "admin_statut") {
+          const current = (await sbGet("statut", SB_KEY)) || "dispo";
+          const statuts = { dispo: "🟢 Disponible", "15min": "🟡 ~15 min", "1h": "🟡 ~1h", pause: "🟠 Pause", indispo: "🔴 Indisponible" };
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: query.message.chat.id,
+              message_id: query.message.message_id,
+              text: `Statut actuel : ${statuts[current]}\n\nChoisis :`,
+              reply_markup: { inline_keyboard: Object.entries(statuts).map(([k, v]) => [{ text: (k === current ? "✅ " : "") + v, callback_data: `set_${k}` }]) }
+            })
+          });
+        }
+
+        if (data.startsWith("set_")) {
+          const nouveau = data.replace("set_", "");
+          await sbSet("statut", nouveau, SB_KEY);
+          await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/editMessageText`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              chat_id: query.message.chat.id,
+              message_id: query.message.message_id,
+              text: `✅ Statut mis à jour !`
+            })
+          });
+        }
+      }
+
+      return new Response("ok");
+    }
+
+    return new Response("Not found", { status: 404 });
+  }
+};
